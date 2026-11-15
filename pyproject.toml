@@ -1,0 +1,9 @@
+[project]
+name = "verified-lit-review"
+version = "0.2.0"
+description = "Agentic RAG for literature reviews, with every quote verified against its PDF page"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

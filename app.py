@@ -1,0 +1,107 @@
+# -*- coding: utf-8 -*-
+"""Web UI.   streamlit run app.py   (needs ANTHROPIC_API_KEY in the environment)"""
+import os
+import subprocess
+import sys
+import time
+
+import streamlit as st
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+from verified_lit_review import service  # noqa: E402
+
+EXAMPLES = [
+    "Does telephone follow-up after hospital discharge reduce readmissions?",
+    "Do pharmacist-led medication reviews reduce hospital readmissions in older adults?",
+    "Does early mobilisation in the ICU improve functional outcomes?",
+]
+MODELS = {"Claude Opus 5.5 (המדויק ביותר)": "claude-opus-5-5", "Claude Sonnet 5.5": "claude-sonnet-5-5",
+          "Claude Haiku 5.5 (הזול ביותר)": "claude-haiku-5-5"}
+ICONS = {"search": "🔍", "fetch": "⬇️", "retrieve": "📄", "verify": "✅"}
+
+st.set_page_config(page_title="סקירת ספרות מאומתת", page_icon="🩺", layout="wide")
+st.markdown("""<style>
+  .block-container, section[data-testid="stSidebar"] {direction: rtl; text-align: right;}
+  blockquote, code {direction: ltr; text-align: left;}
+  [data-testid="stMetricValue"] {direction: ltr;}
+</style>""", unsafe_allow_html=True)
+
+# ------------------------------------------------------------------ sidebar
+with st.sidebar:
+    st.header("הגדרות")
+    n_papers = st.slider("מספר מאמרים", 1, 5, 3)
+    language = st.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get, horizontal=True)
+    model = MODELS[st.selectbox("מודל", list(MODELS))]
+    st.divider()
+    st.subheader("ריצות קודמות")
+    for r in service.list_runs(8):
+        st.caption(f"#{r['run_id']} · {r['verified']}/{r['quotes']} ✅ · {r['question'][:55]}")
+
+# ------------------------------------------------------------------ main
+st.title("🩺 סקירת ספרות רפואית עם ציטוטים מאומתים")
+st.markdown("סוכן AI מחפש מאמרים בגישה פתוחה, קורא אותם וכותב סיכום. "
+            "**כל ציטוט נבדק בקוד מול העמוד המדויק ב-PDF**, וציטוט שלא נמצא נדחה.")
+
+if "question" not in st.session_state:
+    st.session_state.question = EXAMPLES[0]
+cols = st.columns(len(EXAMPLES))
+for col, ex in zip(cols, EXAMPLES):
+    if col.button(ex[:48] + "…", use_container_width=True):
+        st.session_state.question = ex
+question = st.text_area("שאלת מחקר (באנגלית או בעברית)", key="question", height=80)
+
+if not os.environ.get("ANTHROPIC_API_KEY"):
+    st.error("לא הוגדר ANTHROPIC_API_KEY. הגדירי אותו כמשתנה סביבה והפעילי מחדש.")
+    st.stop()
+
+if st.button("▶️ הרץ סקירה", type="primary"):
+    with st.status("הסוכן עובד…", expanded=True) as status:
+        def on_event(kind, msg):
+            st.write(f"{ICONS.get(kind, '•')} {msg}")
+        try:
+            st.session_state.result = service.run_review(question, n_papers, language, model=model, on_event=on_event)
+            status.update(label="הסקירה הושלמה", state="complete", expanded=False)
+        except Exception as e:  # shown to the user instead of a stack trace
+            status.update(label="הריצה נכשלה", state="error")
+            st.error(f"{type(e).__name__}: {e}")
+
+r = st.session_state.get("result")
+if r:
+    total = r["verified"] + len(r["rejected"])
+    c = st.columns(5)
+    c[0].metric("מאמרים", r["papers"])
+    c[1].metric("ציטוטים שאומתו", f"{r['verified']}/{total}")
+    c[2].metric("נדחו", len(r["rejected"]))
+    c[3].metric("עלות", f"${r['cost_usd']:.2f}")
+    c[4].metric("זמן", f"{r['seconds']:.0f}s")
+
+    tab_report, tab_audit, tab_how = st.tabs(["📝 הדו\"ח", "🔎 תיעוד אימות (Audit trail)", "⚙️ איך זה עובד"])
+    with tab_report:
+        st.markdown(r["report_markdown"])
+        d1, d2 = st.columns(2)
+        d1.download_button("הורדה כ-Markdown", r["report_markdown"], "Research_Summary_Report.md")
+        docx = os.path.splitext(r["report"])[0] + ".docx"
+        if not os.path.exists(docx):
+            conv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "verified_lit_review", "md_to_docx.py")
+            subprocess.run([sys.executable, "-I", conv, r["report"], docx], capture_output=True)
+        if os.path.exists(docx):
+            with open(docx, "rb") as f:
+                d2.download_button("הורדה כ-Word", f.read(), "Research_Summary_Report.docx")
+    with tab_audit:
+        run = service.get_run(r["run_id"])
+        st.caption(f"ריצה #{r['run_id']} · מודל {run['model']} · "
+                   f"{time.strftime('%d/%m/%Y %H:%M', time.localtime(run['started_at']))} · נשמר ב-SQLite")
+        st.dataframe([{"✅": "✅" if q["verified"] else "❌", "עמוד": q["claimed_page"], "ציטוט": q["text"],
+                       "מאמר": q["title"], "הערה": q["reason"] or ""} for q in run["quote_checks"]],
+                     use_container_width=True, hide_index=True)
+        if r["rejected"]:
+            st.warning("ציטוטים שנדחו בבדיקה הסופית מול ה-PDF:")
+            st.json(r["rejected"])
+    with tab_how:
+        st.markdown("""
+1. **סוכן (Claude):** מפרק את השאלה, מחפש ב-Europe PMC ובוחר מאמרים לפי התקציר.
+2. **הורדה:** PDF בגישה פתוחה מ-PMC (AWS) או OpenAlex; כל עמוד נשמר ב-SQLite (FTS5).
+3. **RAG:** הסוכן שולף רק את העמודים הרלוונטיים וכותב ממצאים וציטוטים על בסיסם.
+4. **בקרה:** כל ציטוט נבדק מילה במילה ומספר במספר מול העמוד. ציטוט שגוי חוזר לסוכן לתיקון, ובבדיקה הסופית נשאר רק מה שאומת.
+5. **תיעוד:** כל בדיקה נשמרת במסד הנתונים עם המודל, הזמן והעלות.
+""")

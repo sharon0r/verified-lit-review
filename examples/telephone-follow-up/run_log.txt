@@ -1,0 +1,19 @@
+$ python -m verified_lit_review "Does telephone follow-up after hospital discharge reduce readmissions?" --n 3
+
+🤖 claude-opus-5-5 · question: Does telephone follow-up after hospital discharge reduce readmissions?
+
+🔍 'telephone follow-up after hospital discharge readmission randomized trial': 10 papers (network)
+🔍 'post-discharge telephone calls readmission systematic review meta-analysis': 0 papers (network)
+🔍 'telephone follow-up discharge readmission meta-analysis': 2 papers (network)
+🔍 'aortic valve replacement telephone support readmission randomized AVRre': 1 papers (network)
+⬇  10.2196/80529: cached, 14 pages
+⬇  10.1093/ageing/afaa002: ok, 12 pages
+⬇  10.1007/s12603-016-0745-7: ok, 8 pages
+📄 10.2196/80529: pages [7, 13, 6] for 'results readmission ED visits 30 days intervention vs control odds ratio'
+📄 10.1093/ageing/afaa002: pages [10, 1, 11] for 'telephone follow-up readmission relative risk meta-analysis'
+📄 10.1007/s12603-016-0745-7: pages [1, 4, 2] for 'telephone group readmission 30 and 90 days results'
+✅ submission 1: 6/6 quotes verified
+
+📝 Report: output/Research_Summary_Report.md
+✅ Quotes verified: 6/6 · papers: 3 · run #1
+💲 52,344 input + 3,869 output tokens ≈ $0.2868 · 55.0s

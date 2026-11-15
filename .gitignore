@@ -1,0 +1,14 @@
+# papers are downloaded locally, never committed
+*.pdf
+pdfs/
+pages_txt/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.docx
+
+# local SQLite cache / audit trail
+*.db
+.env
