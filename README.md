@@ -51,15 +51,16 @@ Question: *Does telephone follow-up after hospital discharge reduce readmissions
 🔍 [europepmc] 'post-discharge telephone calls readmission systematic review meta-analysis': 0 papers
 🔍 [europepmc] 'telephone follow-up discharge readmission systematic review': 3 papers
 ⬇  10.1186/s12913-016-1650-9: ok, 9 pages
-📄 10.1093/ageing/afaa002: pages [1, 3] for 'meta-analysis stratified by component telephone follow-up RR ...'
-📄 10.2196/80529: pages [3, 9] for 'limitations quasi-randomized allocation design'
+⬇  10.2196/80529: ok, 14 pages
+⬇  10.1007/s12603-016-0745-7: ok, 8 pages
+📄 10.2196/80529: pages [3, 9] for 'quasi-randomized allocation participants number limitations'
 ✅ submission 1: 7/7 quotes verified
-💲 ≈ $0.28 · 74 s
+💲 86,285 input (57,882 from cache) + 4,843 output tokens ≈ $0.26 · 70 s
 ```
 
-The report opens with a conclusion that does not overstate: a stand-alone call has **not** been shown to reduce readmissions; benefit appears when the call is part of a broader transition bundle. The largest trial (n = 7,091) reduced emergency visits but not readmissions, and the agent reports the authors' NNT instead of computing its own.
+The report opens with a conclusion that does not overstate: a stand-alone call has **not** been shown to reduce readmissions; benefit appears when the call is part of a broader transition bundle. The largest trial (n = 7,091) reduced emergency visits but not readmissions; in the randomized trial only the per-protocol analysis was significant, and the report says that this analysis is open to bias. Each paper states **why it was chosen** and **which database and download route** it came from.
 
-A second run, on an education question (*Does formative assessment with feedback improve student achievement?*): the agent chose OpenAlex on its own and verified 6/6 quotes for $0.22 ([report](examples/formative-assessment/Research_Summary_Report.md)).
+A second run, on an education question (*Does formative assessment with feedback improve student achievement?*): the agent chose OpenAlex on its own and verified 6/6 quotes for $0.27 ([report](examples/formative-assessment/Research_Summary_Report.md)).
 
 ## Run it
 

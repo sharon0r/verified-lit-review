@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS papers (
     pdf_urls    TEXT,                       -- JSON list of candidate open-access PDF links
     pdf_path    TEXT,                       -- local file once downloaded
     pdf_sha256  TEXT,                       -- fingerprint of the exact file that was verified
+    pdf_route   TEXT,                       -- where the PDF was downloaded from
     source      TEXT,
     added_at    REAL NOT NULL
 );
@@ -96,6 +97,8 @@ class Store:
         for col, kind in (("cost_usd", "REAL"), ("served_model", "TEXT"), ("error", "TEXT")):
             if col not in cols:                                 # migrate databases from v0.2.0
                 self.conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {kind}")
+        if "pdf_route" not in {r[1] for r in self.conn.execute("PRAGMA table_info(papers)")}:
+            self.conn.execute("ALTER TABLE papers ADD COLUMN pdf_route TEXT")
 
     def close(self):
         self.conn.close()
@@ -142,10 +145,10 @@ class Store:
         d["pdf_urls"] = json.loads(d["pdf_urls"] or "[]")
         return d
 
-    def set_pdf(self, paper_id, pdf_path):
+    def set_pdf(self, paper_id, pdf_path, route=None):
         with self.conn:
-            self.conn.execute("UPDATE papers SET pdf_path=?, pdf_sha256=? WHERE paper_id=?",
-                              (pdf_path, sha256_file(pdf_path), paper_id))
+            self.conn.execute("UPDATE papers SET pdf_path=?, pdf_sha256=?, pdf_route=? WHERE paper_id=?",
+                              (pdf_path, sha256_file(pdf_path), route, paper_id))
 
     # ------------------------------------------------------------ page text (RAG retrieval)
     def add_pages(self, paper_id, page_texts):

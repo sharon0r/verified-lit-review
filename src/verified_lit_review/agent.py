@@ -26,6 +26,7 @@ MODEL = "claude-opus-5-5"
 PRICE_PER_MTOK = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 10.00),
                   "claude-haiku-5-5": (0.10, 0.50)}
 PROMPT = os.path.join(os.path.dirname(__file__), "prompts", "agent_system.md")
+DATABASE_NAMES = {"europepmc": "Europe PMC", "openalex": "OpenAlex"}
 MAX_TURNS = 30
 MAX_COST_USD = float(os.environ.get("MAX_COST_PER_RUN", "1.00"))   # hard stop for one runaway run
 MAX_SUBMITS = 2
@@ -42,6 +43,9 @@ ARTICLE = _schema({
     "paper_id": {"type": "string"},
     "topic": {"type": "string", "description": "the sub-topic this paper answers"},
     "study_type": {"type": "string", "description": "design, sample size, follow-up"},
+    "why_chosen": {"type": "string",
+                   "description": "one sentence: why this paper was selected over the other candidates "
+                                  "(design strength, directness, recency, population)"},
     "bullets": {"type": "array", "items": {"type": "string"}},
     "relevance": {"type": "string", "description": "how it answers the question + its limits"},
     "quotes": {"type": "array", "items": QUOTE},
@@ -224,6 +228,9 @@ class Agent:
             arts.append({"file": os.path.abspath(p["pdf_path"]), "title": p["title"], "authors": p.get("authors"),
                          "year": p.get("year"), "journal": p.get("journal"), "doi": p.get("doi"),
                          "topic": a["topic"], "study_type": a["study_type"], "bullets": a["bullets"],
+                         "why_chosen": a.get("why_chosen", ""),
+                         "database": DATABASE_NAMES.get(p.get("source"), p.get("source")),
+                         "download_route": p.get("pdf_route"),
                          "relevance": a["relevance"], "quotes": a["quotes"]})
             for q in a["quotes"]:
                 ok, found, reason = self._check(a["paper_id"], int(q["page"]), q["text"])

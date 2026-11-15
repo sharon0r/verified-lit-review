@@ -145,3 +145,17 @@ def test_served_model_and_cost_are_recorded(setup):
     r = Agent(store, str(tmp), client=client).run("q", n_papers=1, out_path=str(tmp / "r.md"))
     row = store.conn.execute("SELECT served_model, cost_usd FROM runs WHERE run_id=?", (r["run_id"],)).fetchone()
     assert row["served_model"] == "claude-opus-5-5" and row["cost_usd"] == r["cost_usd"]
+
+
+def test_report_shows_database_route_and_why_chosen(setup):
+    store, pid, tmp = setup
+    store.conn.execute("UPDATE papers SET source='europepmc', pdf_route='PMC open-data (AWS)' WHERE paper_id=?", (pid,))
+    store.conn.commit()
+    art = {**article(pid, [{"page": 1, "text": GOOD}]), "why_chosen": "Largest randomized trial found."}
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)),
+                         reply(tool_call("submit_report", articles=[art], conclusion="Mixed evidence."))])
+    Agent(store, str(tmp), client=client).run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
+    report = (tmp / "r.md").read_text(encoding="utf-8")
+    assert "**Why chosen:** Largest randomized trial found." in report
+    assert "**Found in:** Europe PMC · downloaded via: PMC open-data (AWS)" in report
+    assert report.index("Mixed evidence.") < report.index("Summary of articles")   # conclusion first

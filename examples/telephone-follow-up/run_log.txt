@@ -5,20 +5,16 @@ $ python -m verified_lit_review "Does telephone follow-up after hospital dischar
 🔍 [europepmc] 'telephone follow-up after hospital discharge readmission randomized trial': 10 papers (network)
 🔍 [europepmc] 'post-discharge telephone calls readmission systematic review meta-analysis': 0 papers (network)
 🔍 [europepmc] 'telephone follow-up discharge readmission systematic review': 3 papers (network)
-🔍 [europepmc] 'aortic valve replacement telephone support readmission randomized AVRre': 1 papers (network)
+🔍 [europepmc] 'aortic valve replacement telephone support 30-day readmission randomized AVRre': 1 papers (network)
 ⬇  10.1186/s12913-016-1650-9: ok, 9 pages
-⬇  10.2196/80529: cached, 14 pages
-⬇  10.1093/ageing/afaa002: cached, 12 pages
-📄 10.1186/s12913-016-1650-9: pages [1, 2, 7] for 'results number of studies effective in reducing 30 day readmission
-telephone follow up'
-📄 10.2196/80529: pages [7, 13, 6] for 'results readmission ED visits odds ratio intervention vs control'
-📄 10.1093/ageing/afaa002: pages [4, 8, 3] for 'telephone follow-up readmission risk ratio meta-analysis'
-📄 10.1093/ageing/afaa002: pages [1, 3] for 'meta-analysis stratified by component telephone follow-up RR pooled
-readmission heterogeneity'
-📄 10.2196/80529: pages [3, 9] for 'limitations quasi-randomized allocation design'
+⬇  10.2196/80529: ok, 14 pages
+⬇  10.1007/s12603-016-0745-7: ok, 8 pages
+📄 10.1186/s12913-016-1650-9: pages [1, 7, 2] for 'results number of studies effective in reducing 30-day readmission'
+📄 10.2196/80529: pages [7, 13, 8] for 'results readmission ED visits odds ratio intervention vs control'
+📄 10.1007/s12603-016-0745-7: pages [1, 4, 2] for 'telephone group readmission 30 and 90 days results'
+📄 10.2196/80529: pages [3, 9] for 'quasi-randomized allocation participants number limitations'
 ✅ submission 1: 7/7 quotes verified
 
 📝 Report: output/Research_Summary_Report.md
-✅ Quotes verified: 7/7 · papers: 3 · run #3
-💲 14 input + 5,006 output tokens ≈ $0.2776 · 74.2s
-# (this version printed only uncached input tokens; most input was served from the prompt cache)
+✅ Quotes verified: 7/7 · papers: 3 · run #1
+💲 86,285 input (57,882 from cache) + 4,843 output tokens ≈ $0.262 · 69.8s

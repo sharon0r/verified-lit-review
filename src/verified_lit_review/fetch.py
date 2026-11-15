@@ -175,7 +175,7 @@ def fetch_paper(paper, store, pdf_dir):
                 os.remove(dest)
                 continue
             store.add_pages(paper_id, pages)
-            store.set_pdf(paper_id, dest)
+            store.set_pdf(paper_id, dest, route=label)
             return {**result, "status": "ok", "pdf_path": dest, "pages": len(pages), "route": label}
     except SourceError as e:                            # a route lookup itself failed (network)
         result["attempts"].append({"route": "lookup", "url": "", "result": str(e)})

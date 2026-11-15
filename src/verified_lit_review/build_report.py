@@ -49,6 +49,7 @@ LABELS = {
     "he": dict(title="דו\"ח סיכום ספרות", count="{} מאמרים", question="שאלת המחקר", table="טבלת סיכום המאמרים",
                cols=["#", "נושא", "שם המאמר", "מחברים", "שנה", "מקור"], article="שם המאמר",
                authors="מחברים", source="מקור", type="סוג המחקר", file="קובץ",
+               why="למה נבחר", database="נמצא במאגר", route="הורד דרך",
                findings="עיקרי הממצאים", relevance="רלוונטיות והסתייגויות", quotes="ציטוטים מתוך המאמר",
                pdf_page="עמוד PDF", journal_page="עמוד {} בכתב העת", ok="✅ אומת",
                note=("> **מה מאומת:** כל **ציטוט** נבדק אוטומטית, מילה במילה, מול טקסט עמוד ה-PDF שאליו הוא משויך, "
@@ -59,6 +60,7 @@ LABELS = {
     "en": dict(title="Literature Review Report", count="{} articles", question="Research question", table="Summary of articles",
                cols=["#", "Topic", "Title", "Authors", "Year", "Source"], article="Title",
                authors="Authors", source="Source", type="Study type", file="File",
+               why="Why chosen", database="Found in", route="downloaded via",
                findings="Key findings", relevance="Relevance and caveats", quotes="Quotes from the article",
                pdf_page="PDF page", journal_page="journal p. {}", ok="✅ verified",
                note=("> **What is verified:** every **quote** was automatically checked, word for word, against the "
@@ -129,6 +131,11 @@ def build_report(spec, pdf_dir, out):
                f"**{L['source']}:** {a.get('journal', '')}  "]
         if a.get("study_type"):
             md.append(f"**{L['type']}:** {a['study_type']}  ")
+        if a.get("why_chosen"):
+            md.append(f"**{L['why']}:** {a['why_chosen']}  ")
+        if a.get("database"):
+            route = f" · {L['route']}: {a['download_route']}" if a.get("download_route") else ""
+            md.append(f"**{L['database']}:** {a['database']}{route}  ")
         if a.get("doi"):
             md.append(f"**DOI:** [{a['doi']}](https://doi.org/{a['doi']})  ")
         md += [f"**{L['file']}:** `{os.path.basename(a['file'])}`", "", f"### {L['findings']}", ""]  # no local paths
