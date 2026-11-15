@@ -54,6 +54,13 @@ def hebrew_error(message):
                 "הריצה נכשלה. נסו שוב או נסחו את השאלה אחרת.")
 
 
+def service_unavailable(error):
+    """Errors caused by the owner's API account (no credit, bad or revoked key, rate limit)."""
+    status = getattr(error, "status_code", None)
+    text = str(error).lower()
+    return status in (401, 403, 429, 529) or "credit balance" in text or "billing" in text
+
+
 def runs_text(n):
     return "ריצה אחת" if n == 1 else f"{n} ריצות"
 
@@ -71,10 +78,12 @@ AUTHOR = ("נבנה על ידי **שרון וייסברג (Sharon Weissberg)** �
 MODEL = "claude-opus-5-5"
 ICONS = {"search": "🔍", "fetch": "⬇️", "retrieve": "📄", "verify": "✅"}
 
-st.set_page_config(page_title="סקירת ספרות מאומתת", page_icon="📚", layout="wide")
+st.set_page_config(page_title="סקירת ספרות מאומתת", page_icon="📚", layout="centered")
 st.markdown("""<style>
   .block-container, section[data-testid="stSidebar"] {direction: rtl; text-align: right;}
   code {direction: ltr; text-align: left;}
+  /* an English question in the text box keeps its punctuation in place ("?" at the end) */
+  textarea, input {unicode-bidi: plaintext; text-align: start;}
   /* each paragraph takes its direction from its own text: Hebrew right-to-left, an English report
      or an English quote left-to-right */
   .stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th, .stMarkdown h1, .stMarkdown h2,
@@ -168,7 +177,9 @@ else:
     st.caption((f"נותרה לכם {runs_text(mine_left)} · " if mine_left else "")
                + f"היום נותרו באתר {runs_text(left_today)} מתוך {DAILY_RUN_LIMIT}")
 
+run_failed = False
 if can_run and st.button("▶️ התחילו סקירה", type="primary"):
+    run_failed = True                                    # until the run below succeeds
     if service.runs_since(time.time() - 86400) >= DAILY_RUN_LIMIT:   # re-check right before spending
         st.warning("הריצות של היום נוצלו.")
         st.stop()
@@ -186,15 +197,20 @@ if can_run and st.button("▶️ התחילו סקירה", type="primary"):
             st.session_state.my_runs = my_runs + 1
             status.update(label="הריצה נכשלה", state="error")
             st.error(hebrew_error(str(e)))
-        except Exception:  # noqa: BLE001 - no internal details on a public page
-            st.session_state.my_runs = my_runs + 1
+        except Exception as e:  # noqa: BLE001 - no internal details on a public page
             status.update(label="הריצה נכשלה", state="error")
-            st.error("אירעה שגיאה בלתי צפויה. נסו שוב בעוד דקה.")
-    if st.session_state.get("result") and st.session_state.get("my_runs", 0) > my_runs:
+            if service_unavailable(e):               # our account, not the visitor: keep their trial run
+                st.error("השירות אינו זמין כרגע. הריצה שלכם לא נוצלה, ואפשר לנסות שוב מאוחר יותר.")
+            else:
+                st.session_state.my_runs = my_runs + 1
+                st.error("אירעה שגיאה בלתי צפויה. נסו שוב בעוד דקה.")
+        else:
+            run_failed = False
+    if not run_failed:
         st.rerun()                                       # refresh the counters above for the new state
 
 r = st.session_state.get("result")
-if not r:            # after a run the visitor's own report replaces the example, so it is not in the way
+if not r and not run_failed:   # the example never stands in for a visitor's own (failed) run
     show_demo()
 if r:
     total = r["verified"] + len(r["rejected"])

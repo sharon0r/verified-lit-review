@@ -86,6 +86,21 @@ def test_changing_a_setting_is_not_counted_as_another_wrong_password(env, monkey
     assert len(at.expander) == 1                                       # the example is offered behind the gate
 
 
+def test_empty_api_balance_shows_a_clear_message_and_keeps_the_visitors_run(env, monkeypatch):
+    class NoCredit(Exception):
+        status_code = 400
+
+    def no_credit(*a, **kw):
+        raise NoCredit("Your credit balance is too low to access the Anthropic API.")
+    monkeypatch.setattr(service, "run_review", no_credit)
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    next(b for b in at.button if b.label == "▶️ התחילו סקירה").click().run()
+    assert not at.exception
+    assert "השירות אינו זמין כרגע" in at.error[0].value
+    assert "my_runs" not in at.session_state or at.session_state["my_runs"] == 0
+    assert len(at.expander) == 0                 # the example report does not appear in place of a result
+
+
 def test_demo_report_is_shown_without_any_key(env, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY")
     at = AppTest.from_file(APP, default_timeout=30).run()
