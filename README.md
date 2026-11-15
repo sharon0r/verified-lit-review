@@ -63,6 +63,19 @@ The report states the question as **PICO**, says plainly that it is a rapid look
 
 A second run, on an education question (*Does formative assessment with feedback improve student achievement?*): the agent chose OpenAlex on its own and verified 6/6 quotes for $0.27 ([report](examples/formative-assessment/Research_Summary_Report.md)).
 
+## Evaluation
+
+Every run checks quotes and numbers in code. In addition, after each change a report was reviewed by **AI reviewer agents** (LLM-as-judge: a separate Claude agent instructed to review as a physician-researcher or a clinical psychologist; not human experts):
+
+| Round | Main change | Score |
+|---|---|---|
+| 1 | baseline | 6 / 10 (physician agent), 6 / 10 (psychologist agent) |
+| 2 | reporting rules for statistics and certainty | 7 / 10, 7 / 10 |
+| 3 | PubMed search for recent systematic reviews | 8.5 / 10 |
+| 4 | number guardrail, absolute effects | 9 / 10 |
+
+Method, findings per round, open issues and the limits of this evaluation: [EVALUATION.md](EVALUATION.md).
+
 ## Run it
 
 ```bash
