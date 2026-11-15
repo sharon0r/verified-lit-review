@@ -26,7 +26,7 @@ MODEL = "claude-opus-5-5"
 PRICE_PER_MTOK = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 10.00),
                   "claude-haiku-5-5": (0.10, 0.50)}
 PROMPT = os.path.join(os.path.dirname(__file__), "prompts", "agent_system.md")
-DATABASE_NAMES = {"europepmc": "Europe PMC", "openalex": "OpenAlex"}
+DATABASE_NAMES = {"europepmc": "Europe PMC", "openalex": "OpenAlex", "pubmed": "PubMed"}
 MAX_TURNS = 30
 MAX_COST_USD = float(os.environ.get("MAX_COST_PER_RUN", "1.00"))   # hard stop for one runaway run
 MAX_SUBMITS = 2
@@ -53,11 +53,12 @@ ARTICLE = _schema({
 
 TOOLS = [
     {"name": "search_papers", "strict": True,
-     "description": "Search open-access papers. database 'europepmc' = medicine and life sciences; "
-                    "'openalex' = every discipline (education, social sciences, engineering, ...). "
-                    "Use English keywords.",
+     "description": "Search open-access papers. database 'pubmed_reviews' = only systematic reviews and "
+                    "meta-analyses from the last 10 years in health sciences (PubMed); 'europepmc' = medicine "
+                    "and life sciences, all study types; 'openalex' = every discipline (education, social "
+                    "sciences, engineering, ...). Use English keywords.",
      "input_schema": _schema({"query": {"type": "string"},
-                              "database": {"type": "string", "enum": ["europepmc", "openalex"]},
+                              "database": {"type": "string", "enum": ["pubmed_reviews", "europepmc", "openalex"]},
                               "n": {"type": "integer", "description": "results, 1-15"}})},
     {"name": "fetch_paper", "strict": True,
      "description": "Download a paper's open-access PDF and index its pages. Call before reading it.",
@@ -95,6 +96,7 @@ class Agent:
         self.usage = {"input_tokens": 0, "output_tokens": 0,
                       "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
         self.served_models = set()
+        self.bounced = []          # quotes the guardrail rejected during the run (audit trail)
 
     @property
     def client(self):
@@ -162,6 +164,9 @@ class Agent:
                 if not ok:
                     failures.append({"paper_id": a["paper_id"], "page": q["page"], "text": q["text"][:120],
                                      "reason": reason})
+                    self.bounced.append({"submission": self.submissions, "paper_id": a["paper_id"],
+                                         "page": int(q["page"]), "text": q["text"], "found_on": found,
+                                         "reason": reason})
         total = sum(len(a["quotes"]) for a in articles)
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified")
         self.final = articles
@@ -242,6 +247,11 @@ class Agent:
                 self.store.log_quote(run_id, a["paper_id"], int(q["page"]), q["text"], ok, found, reason)
         if not arts:
             raise RuntimeError("none of the submitted papers could be downloaded and read")
+        final_quotes = {(a["paper_id"], int(q["page"]), q["text"]) for a in self.final for q in a["quotes"]}
+        for b in self.bounced:     # rejected in an earlier submission and then fixed or dropped by the agent
+            if (b["paper_id"], b["page"], b["text"]) not in final_quotes:
+                self.store.log_quote(run_id, b["paper_id"], b["page"], b["text"], False, b["found_on"],
+                                     f"returned to the agent at submission {b['submission']}: {b['reason']}")
         spec = {"question": question, "language": language, "articles": arts,
                 "conclusion": getattr(self, "conclusion", ""), "pico": getattr(self, "pico", ""),
                 "certainty": getattr(self, "certainty", "")}

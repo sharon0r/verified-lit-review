@@ -79,7 +79,8 @@ def test_agent_fixes_rejected_quotes_and_report_keeps_only_verified(setup):
     report = (tmp / "report.md").read_text(encoding="utf-8")
     assert GOOD in report and WRONG_PAGE in report and ALTERED not in report
     assert r["verified"] == 2 and r["rejected"] == []
-    assert store.run_summary(r["run_id"]) == {"total": 2, "verified": 2, "rejected": 0}
+    # 2 final quotes verified + the 2 quotes bounced at the first submission (kept in the audit trail)
+    assert store.run_summary(r["run_id"]) == {"total": 4, "verified": 2, "rejected": 2}
     assert r["cost_usd"] == round(4000 / 1e6 * 4 + 800 / 1e6 * 20, 4)
     assert [k for k, _ in events] == ["fetch", "retrieve", "verify", "verify"]
 
@@ -173,3 +174,17 @@ def test_report_shows_pico_certainty_and_scope(setup):
     assert "**PICO:** P: adults; I: calls" in report
     assert "Certainty of evidence (GRADE-style, approximate):** Low" in report
     assert "not a systematic review" in report
+
+
+def test_quotes_bounced_during_the_run_are_kept_in_the_audit_trail(setup):
+    store, pid, tmp = setup
+    client = FakeClient([
+        reply(tool_call("fetch_paper", paper_id=pid)),
+        reply(tool_call("submit_report", articles=[article(pid, [{"page": 1, "text": GOOD}, {"page": 1, "text": ALTERED}])])),
+        reply(tool_call("submit_report", articles=[article(pid, [{"page": 1, "text": GOOD}])])),
+    ])
+    r = Agent(store, str(tmp), client=client).run("q", n_papers=1, out_path=str(tmp / "r.md"))
+    rows = store.conn.execute("SELECT verified, reason FROM quote_checks WHERE run_id=? ORDER BY rowid",
+                              (r["run_id"],)).fetchall()
+    assert [row["verified"] for row in rows] == [1, 0]
+    assert "returned to the agent at submission 1" in rows[1]["reason"]

@@ -221,4 +221,76 @@ def search_openalex(question, store, n=10, max_age_days=30):
     return papers, "network"
 
 
-SEARCHERS = {"europepmc": search_europepmc, "openalex": search_openalex}
+# ------------------------------------------------------------------ PubMed (systematic reviews only)
+# Europe PMC already contains PubMed, so this source is not about coverage: PubMed's publication-type
+# index finds the most recent systematic reviews and meta-analyses (incl. Cochrane) that a keyword
+# search ranks too low - the gap that expert reviewers found in earlier reports.
+PUBMED_SEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+PUBMED_FETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+REVIEWS_YEARS = 10
+
+
+def pubmed_term(question):
+    words = keywords(question)
+    if not words:
+        raise ValueError("the question has no searchable English keywords")
+    since = time.gmtime().tm_year - REVIEWS_YEARS
+    return (" ".join(words) + " AND (systematic review[pt] OR meta-analysis[pt]) AND free full text[sb]"
+            f" AND {since}:3000[dp] NOT retracted publication[pt]")
+
+
+def parse_pubmed_xml(xml_text):
+    import xml.etree.ElementTree as ET
+    out = []
+    for art in ET.fromstring(xml_text).findall(".//PubmedArticle"):
+        ids = {i.get("IdType"): (i.text or "").strip() for i in art.findall(".//PubmedData/ArticleIdList/ArticleId")}
+        authors = [f"{a.findtext('LastName', '')} {a.findtext('Initials', '')}".strip()
+                   for a in art.findall(".//AuthorList/Author") if a.findtext("LastName")]
+        abstract = " ".join("".join(t.itertext()).strip() for t in art.findall(".//Abstract/AbstractText"))
+        year = art.findtext(".//JournalIssue/PubDate/Year") or (art.findtext(".//JournalIssue/PubDate/MedlineDate") or "")[:4]
+        out.append({
+            "source": "pubmed",
+            "source_id": f"PMID:{ids.get('pubmed', '')}",
+            "title": _clean("".join(art.find(".//ArticleTitle").itertext())).rstrip("."),
+            "authors": ", ".join(authors[:8]),
+            "journal": art.findtext(".//Journal/Title") or "",
+            "year": year,
+            "doi": ids.get("doi") or None,
+            "pmcid": ids.get("pmc") or None,
+            "abstract": _clean(abstract) or None,
+            "pub_types": [p.text for p in art.findall(".//PublicationType")],
+            "pdf_urls": [],                      # downloaded via PMC on AWS (pmcid) or OpenAlex (doi)
+        })
+    return out
+
+
+def search_pubmed_reviews(question, store, n=10, max_age_days=30):
+    """Recent systematic reviews / meta-analyses with free full text, from PubMed (NCBI E-utilities)."""
+    term = pubmed_term(question)
+    key = f"{term}|n={n}"
+    cached = store.get_cached_search("pubmed", key, max_age_days)
+    if cached is not None:
+        return cached, "cache"
+    ident = {"tool": "verified-lit-review"}
+    if os.environ.get("CONTACT_EMAIL"):
+        ident["email"] = os.environ["CONTACT_EMAIL"]
+    if os.environ.get("NCBI_API_KEY"):
+        ident["api_key"] = os.environ["NCBI_API_KEY"]
+    try:
+        ids = client().get(PUBMED_SEARCH, params={"db": "pubmed", "term": term, "retmax": n, "retmode": "json",
+                                                  **ident}).json()["esearchresult"]["idlist"]
+        papers = parse_pubmed_xml(client().get(PUBMED_FETCH, params={
+            "db": "pubmed", "id": ",".join(ids), "retmode": "xml", **ident}).text) if ids else []
+    except (SourceError, ValueError, KeyError) as e:
+        stale = store.get_cached_search("pubmed", key, max_age_days=10**6)
+        if stale is not None:
+            return stale, "cache (stale, offline)"
+        raise SourceError(f"PubMed unavailable and nothing cached: {e}") from e
+    if papers:
+        store.put_cached_search("pubmed", key, papers)
+    for p in papers:
+        store.upsert_paper(p)
+    return papers, "network"
+
+
+SEARCHERS = {"europepmc": search_europepmc, "openalex": search_openalex, "pubmed_reviews": search_pubmed_reviews}

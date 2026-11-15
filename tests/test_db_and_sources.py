@@ -167,3 +167,43 @@ def test_upsert_keeps_pmcid_and_pdf_links_from_an_earlier_source(store):
     store.upsert_paper({"doi": "10.1/k", "pmcid": None, "title": "T", "source": "openalex", "pdf_urls": []})
     p = store.get_paper("10.1/k")
     assert p["pmcid"] == "PMC5" and p["pdf_urls"] == ["https://x.example/a.pdf"]
+
+
+PUBMED_XML = """<PubmedArticleSet><PubmedArticle><MedlineCitation><Article>
+<Journal><JournalIssue><PubDate><Year>2024</Year></PubDate></JournalIssue><Title>Cochrane Database Syst Rev</Title></Journal>
+<ArticleTitle>Exercise-based cardiac rehabilitation for adults with <i>heart failure</i>.</ArticleTitle>
+<Abstract><AbstractText Label="BACKGROUND">Heart failure is common.</AbstractText><AbstractText>Exercise reduced admissions.</AbstractText></Abstract>
+<AuthorList><Author><LastName>Molloy</LastName><Initials>CD</Initials></Author><Author><LastName>Long</LastName><Initials>L</Initials></Author></AuthorList>
+<PublicationTypeList><PublicationType>Systematic Review</PublicationType><PublicationType>Meta-Analysis</PublicationType></PublicationTypeList>
+</Article></MedlineCitation><PubmedData><ArticleIdList><ArticleId IdType="pubmed">38323679</ArticleId>
+<ArticleId IdType="doi">10.1002/14651858.CD003331.pub6</ArticleId><ArticleId IdType="pmc">PMC10849021</ArticleId></ArticleIdList></PubmedData></PubmedArticle></PubmedArticleSet>"""
+
+
+class TextResponse(FakeResponse):
+    def __init__(self, text):
+        super().__init__(data=None)
+        self.text = text
+
+
+def test_pubmed_term_asks_for_recent_open_reviews_only():
+    t = sources.pubmed_term("Does exercise reduce readmissions in heart failure?")
+    for part in ("systematic review[pt]", "meta-analysis[pt]", "free full text[sb]", "NOT retracted publication[pt]", ":3000[dp]"):
+        assert part in t
+
+
+def test_parse_pubmed_xml():
+    p = sources.parse_pubmed_xml(PUBMED_XML)[0]
+    assert p["title"] == "Exercise-based cardiac rehabilitation for adults with heart failure"
+    assert (p["doi"], p["pmcid"], p["year"], p["authors"]) == (
+        "10.1002/14651858.CD003331.pub6", "PMC10849021", "2024", "Molloy CD, Long L")
+    assert p["abstract"] == "Heart failure is common. Exercise reduced admissions."
+    assert "Systematic Review" in p["pub_types"]
+
+
+def test_pubmed_search_two_calls_then_cache(store, fake):
+    session = fake([FakeResponse(data={"esearchresult": {"idlist": ["38323679"]}}), TextResponse(PUBMED_XML)])
+    papers, s1 = sources.search_pubmed_reviews("exercise heart failure readmission", store)
+    _, s2 = sources.search_pubmed_reviews("exercise heart failure readmission", store)
+    assert (s1, s2) == ("network", "cache") and len(session.calls) == 2
+    assert session.calls[0][1]["params"]["tool"] == "verified-lit-review"
+    assert store.get_paper("10.1002/14651858.CD003331.pub6")["pmcid"] == "PMC10849021"
