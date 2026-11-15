@@ -20,7 +20,7 @@ import time
 from .build_report import MIN_QUOTE_CHARS, build_report, norm
 from .db import Store
 from .fetch import fetch_paper
-from .sources import SourceError, search_europepmc
+from .sources import SEARCHERS, SourceError
 
 MODEL = "claude-opus-5-5"
 PRICE_PER_MTOK = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 10.00),
@@ -48,8 +48,11 @@ ARTICLE = _schema({
 
 TOOLS = [
     {"name": "search_papers", "strict": True,
-     "description": "Search open-access biomedical papers (Europe PMC). Use English keywords.",
+     "description": "Search open-access papers. database 'europepmc' = medicine and life sciences; "
+                    "'openalex' = every discipline (education, social sciences, engineering, ...). "
+                    "Use English keywords.",
      "input_schema": _schema({"query": {"type": "string"},
+                              "database": {"type": "string", "enum": ["europepmc", "openalex"]},
                               "n": {"type": "integer", "description": "results, 1-15"}})},
     {"name": "fetch_paper", "strict": True,
      "description": "Download a paper's open-access PDF and index its pages. Call before reading it.",
@@ -84,9 +87,10 @@ class Agent:
         return self._client
 
     # ------------------------------------------------------------------ tools
-    def search_papers(self, query, n=8):
-        papers, status = search_europepmc(query, self.store, n=max(1, min(int(n), 15)))
-        self.on_event("search", f"'{query}': {len(papers)} papers ({status})")
+    def search_papers(self, query, database="openalex", n=8):
+        search = SEARCHERS.get(database, SEARCHERS["openalex"])
+        papers, status = search(query, self.store, n=max(1, min(int(n), 15)))
+        self.on_event("search", f"[{database}] '{query}': {len(papers)} papers ({status})")
         return [{"paper_id": self.store.upsert_paper(p), "title": p["title"], "year": p["year"],
                  "journal": p["journal"], "citations": p.get("citations", 0),
                  "abstract": (p.get("abstract") or "")[:1200]} for p in papers]

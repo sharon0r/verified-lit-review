@@ -118,6 +118,33 @@ def test_offline_with_old_cache_falls_back_to_it(store, fake):
     assert status == "cache (stale, offline)" and papers[0]["title"] == "old result"
 
 
+OPENALEX_JSON = {"results": [{
+    "id": "https://openalex.org/W123", "doi": "https://doi.org/10.5/edu", "display_name": "Formative feedback.",
+    "publication_year": 2024, "cited_by_count": 3,
+    "authorships": [{"author": {"display_name": "Ann Lee"}}, {"author": {"display_name": "Bo Kim"}}],
+    "primary_location": {"source": {"display_name": "Journal of Education"}},
+    "abstract_inverted_index": {"Feedback": [0], "raised": [1], "scores": [2]},
+    "best_oa_location": {"pdf_url": "https://repo.example/a.pdf"},
+    "locations": [{"pdf_url": "https://repo.example/a.pdf"}, {"pdf_url": "https://mirror.example/a.pdf"}],
+    "ids": {"pmcid": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC777"}}]}
+
+
+def test_parse_openalex_rebuilds_abstract_and_dedupes_pdfs():
+    p = sources.parse_openalex(OPENALEX_JSON)[0]
+    assert p["abstract"] == "Feedback raised scores"
+    assert p["pdf_urls"] == ["https://repo.example/a.pdf", "https://mirror.example/a.pdf"]
+    assert (p["doi"], p["pmcid"], p["authors"], p["year"]) == ("10.5/edu", "PMC777", "Ann Lee, Bo Kim", "2024")
+
+
+def test_openalex_search_is_cached_and_filtered_to_open_access(store, fake):
+    session = fake([FakeResponse(data=OPENALEX_JSON)])
+    _, s1 = sources.search_openalex("Does formative feedback improve achievement?", store)
+    _, s2 = sources.search_openalex("Does formative feedback improve achievement?", store)
+    assert (s1, s2) == ("network", "cache") and len(session.calls) == 1
+    assert session.calls[0][1]["params"]["filter"] == "open_access.is_oa:true"
+    assert store.get_paper("10.5/edu")["title"] == "Formative feedback"
+
+
 def test_user_agent_names_the_tool():
     c = sources.PoliteClient(session=FakeSession([]))
     assert c.s.headers["User-Agent"].startswith("verified-lit-review/")

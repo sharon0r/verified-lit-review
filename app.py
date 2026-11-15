@@ -30,14 +30,14 @@ MAX_PAPERS = int(os.environ.get("MAX_PAPERS", "3"))
 
 EXAMPLES = [
     "Does telephone follow-up after hospital discharge reduce readmissions?",
-    "Do pharmacist-led medication reviews reduce hospital readmissions in older adults?",
-    "Does early mobilisation in the ICU improve functional outcomes?",
+    "Does formative assessment with feedback improve student achievement?",
+    "Does remote work affect employee productivity?",
 ]
 MODELS = {"Claude Opus 5.5 (המדויק ביותר)": "claude-opus-5-5", "Claude Sonnet 5.5": "claude-sonnet-5-5",
           "Claude Haiku 5.5 (הזול ביותר)": "claude-haiku-5-5"}
 ICONS = {"search": "🔍", "fetch": "⬇️", "retrieve": "📄", "verify": "✅"}
 
-st.set_page_config(page_title="סקירת ספרות מאומתת", page_icon="🩺", layout="wide")
+st.set_page_config(page_title="סקירת ספרות מאומתת", page_icon="📚", layout="wide")
 st.markdown("""<style>
   .block-container, section[data-testid="stSidebar"] {direction: rtl; text-align: right;}
   blockquote, code {direction: ltr; text-align: left;}
@@ -56,7 +56,7 @@ with st.sidebar:
         st.caption(f"#{r['run_id']} · {r['verified']}/{r['quotes']} ✅ · {r['question'][:55]}")
 
 # ------------------------------------------------------------------ main
-st.title("🩺 סקירת ספרות רפואית עם ציטוטים מאומתים")
+st.title("📚 סקירת ספרות עם ציטוטים מאומתים")
 st.markdown("סוכן AI מחפש מאמרים בגישה פתוחה, קורא אותם וכותב סיכום. "
             "**כל ציטוט נבדק בקוד מול העמוד המדויק ב-PDF**, וציטוט שלא נמצא נדחה.")
 
@@ -134,7 +134,7 @@ if r:
             st.json(r["rejected"])
     with tab_how:
         st.markdown("""
-1. **סוכן (Claude):** מפרק את השאלה, מחפש ב-Europe PMC ובוחר מאמרים לפי התקציר.
+1. **סוכן (Claude):** מפרק את השאלה, מחפש ב-Europe PMC (רפואה ומדעי החיים) או ב-OpenAlex (כל התחומים) ובוחר מאמרים לפי התקציר.
 2. **הורדה:** PDF בגישה פתוחה מ-PMC (AWS) או OpenAlex; כל עמוד נשמר ב-SQLite (FTS5).
 3. **RAG:** הסוכן שולף רק את העמודים הרלוונטיים וכותב ממצאים וציטוטים על בסיסם.
 4. **בקרה:** כל ציטוט נבדק מילה במילה ומספר במספר מול העמוד. ציטוט שגוי חוזר לסוכן לתיקון, ובבדיקה הסופית נשאר רק מה שאומת.

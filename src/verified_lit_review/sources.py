@@ -21,7 +21,10 @@ import urllib.parse
 import requests
 
 TOOL = "verified-lit-review/0.2 (+https://github.com/sharon0r/verified-lit-review)"
-EPMC_SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+EPMC_SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"      # biomedicine and life sciences
+OPENALEX_SEARCH = "https://api.openalex.org/works"                           # every discipline
+OPENALEX_FIELDS = ("id,doi,display_name,authorships,publication_year,primary_location,abstract_inverted_index,"
+                   "cited_by_count,best_oa_location,locations,ids")
 
 STOP = {"the", "and", "of", "in", "on", "for", "to", "a", "an", "with", "versus", "vs", "is", "are",
         "does", "do", "can", "what", "which", "how", "effect", "effects", "impact", "role", "study",
@@ -144,3 +147,65 @@ def search_europepmc(question, store, n=10, max_age_days=30, raw_query=None):
     for p in papers:
         store.upsert_paper(p)
     return papers, "network"
+
+
+# ------------------------------------------------------------------ OpenAlex (all disciplines)
+def _abstract(inverted):
+    """OpenAlex ships abstracts as {word: [positions]}; rebuild the text."""
+    if not inverted:
+        return None
+    words = sorted((pos, w) for w, positions in inverted.items() for pos in positions)
+    return " ".join(w for _, w in words)
+
+
+def parse_openalex(data):
+    out = []
+    for w in data.get("results", []):
+        pdfs = []
+        for loc in [w.get("best_oa_location")] + (w.get("locations") or []):
+            u = (loc or {}).get("pdf_url")
+            if u and u not in pdfs:
+                pdfs.append(u)
+        pmcid = ((w.get("ids") or {}).get("pmcid") or "").rstrip("/").rsplit("/", 1)[-1] or None
+        source = ((w.get("primary_location") or {}).get("source") or {})
+        out.append({
+            "source": "openalex",
+            "source_id": w["id"].rsplit("/", 1)[-1],
+            "title": _clean(w.get("display_name")).rstrip("."),
+            "authors": ", ".join(a["author"]["display_name"] for a in (w.get("authorships") or [])[:8]
+                                 if a.get("author", {}).get("display_name")),
+            "journal": source.get("display_name") or "",
+            "year": str(w.get("publication_year") or ""),
+            "doi": (w.get("doi") or "").replace("https://doi.org/", "") or None,
+            "pmcid": pmcid if pmcid and pmcid.upper().startswith("PMC") else None,
+            "abstract": _abstract(w.get("abstract_inverted_index")),
+            "citations": w.get("cited_by_count", 0),
+            "pdf_urls": pdfs,
+        })
+    return out
+
+
+def search_openalex(question, store, n=10, max_age_days=30):
+    """Search OpenAlex (all disciplines, open-access works only). Returns (papers, status)."""
+    q = " ".join(keywords(question)) or question
+    key = f"{q}|n={n}"
+    cached = store.get_cached_search("openalex", key, max_age_days)
+    if cached is not None:
+        return cached, "cache"
+    params = {"search": q, "filter": "open_access.is_oa:true", "per-page": n, "select": OPENALEX_FIELDS}
+    if os.environ.get("CONTACT_EMAIL"):
+        params["mailto"] = os.environ["CONTACT_EMAIL"]          # OpenAlex "polite pool"
+    try:
+        papers = parse_openalex(client().get(OPENALEX_SEARCH, params=params).json())
+    except (SourceError, ValueError) as e:
+        stale = store.get_cached_search("openalex", key, max_age_days=10**6)
+        if stale is not None:
+            return stale, "cache (stale, offline)"
+        raise SourceError(f"OpenAlex unavailable and nothing cached: {e}") from e
+    store.put_cached_search("openalex", key, papers)
+    for p in papers:
+        store.upsert_paper(p)
+    return papers, "network"
+
+
+SEARCHERS = {"europepmc": search_europepmc, "openalex": search_openalex}

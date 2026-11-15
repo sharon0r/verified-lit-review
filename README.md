@@ -1,11 +1,11 @@
-# Verified Literature Review Agent
+﻿# Verified Literature Review Agent
 
-**An AI agent that answers a clinical research question with a short literature review, where every quote is machine-checked against the exact PDF page it cites.** Agentic RAG with Claude, SQLite full-text retrieval, a code-level anti-hallucination guardrail and an audit trail, exposed as a CLI, a web UI and a REST API.
+**An AI agent that answers a research question in any field (medicine, education, social sciences, ...) with a short literature review, where every quote is machine-checked against the exact PDF page it cites.** Agentic RAG with Claude, SQLite full-text retrieval, a code-level anti-hallucination guardrail and an audit trail, exposed as a CLI, a web UI and a REST API.
 
 [![tests](https://github.com/sharon0r/verified-lit-review/actions/workflows/tests.yml/badge.svg)](https://github.com/sharon0r/verified-lit-review/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
-> **בקצרה:** בניתי ב-Python סוכן AI לשלב הראשון של מחקר: איתור מאמרים וסקירת ספרות. נותנים לו שאלת מחקר ומספר מאמרים. הסוכן (Claude) מחפש מאמרים ביו-רפואיים בגישה פתוחה, מוריד אותם, שומר כל עמוד במסד נתונים SQLite, שולף את העמודים הרלוונטיים וכותב סיכום עם ציטוטים (RAG). לפני שציטוט נכנס לדו"ח, הקוד מוודא שהוא מופיע מילה במילה ומספר במספר בעמוד שצוין. ציטוט שגוי חוזר לסוכן לתיקון, וכל בדיקה נשמרת במסד הנתונים לתיעוד. אפשר להריץ את הכלי משורת הפקודה, מממשק בדפדפן או דרך API.
+> **בקצרה:** בניתי ב-Python סוכן AI לשלב הראשון של מחקר: איתור מאמרים וסקירת ספרות. נותנים לו שאלת מחקר ומספר מאמרים. הסוכן (Claude) מחפש מאמרים בגישה פתוחה מכל תחום, מרפואה ועד חינוך, מוריד אותם, שומר כל עמוד במסד נתונים SQLite, שולף את העמודים הרלוונטיים וכותב סיכום עם ציטוטים (RAG). לפני שציטוט נכנס לדו"ח, הקוד מוודא שהוא מופיע מילה במילה ומספר במספר בעמוד שצוין. ציטוט שגוי חוזר לסוכן לתיקון, וכל בדיקה נשמרת במסד הנתונים לתיעוד. אפשר להריץ את הכלי משורת הפקודה, מממשק בדפדפן או דרך API.
 
 ---
 
@@ -18,7 +18,7 @@ Language models are good at summarizing research and bad at citing it: quotes th
 ```mermaid
 flowchart LR
     Q[Research question] --> A{{Claude agent}}
-    A -- search_papers --> S[Europe PMC API<br/>cached in SQLite]
+    A -- search_papers --> S[Europe PMC / OpenAlex<br/>cached in SQLite]
     A -- fetch_paper --> F[Open-access PDF<br/>PMC on AWS / OpenAlex]
     F --> DB[(SQLite<br/>FTS5 page index)]
     A -- retrieve_passages --> DB
@@ -28,7 +28,7 @@ flowchart LR
     G --> AU[(Audit trail<br/>every quote check)]
 ```
 
-1. **Agent.** Claude splits the question into sub-topics, writes English search queries (also for Hebrew questions), reads abstracts and picks papers. If a PDF cannot be downloaded it chooses another paper.
+1. **Agent.** Claude splits the question into sub-topics, picks the database (Europe PMC for medicine and life sciences, OpenAlex for every other field), writes English search queries (also for Hebrew questions), reads abstracts and picks papers. If a PDF cannot be downloaded it chooses another paper.
 2. **Retrieval.** Each PDF page is stored in a SQLite FTS5 table; the agent reads only the pages that BM25 ranks as relevant.
 3. **Generation.** Findings, caveats and 1-3 exact quotes per paper, with page numbers.
 4. **Guardrail.** Every quote is normalized and must appear on the cited page. Failures go back to the agent once, with the page where the sentence really is; the final report is re-checked against the PDFs and keeps verified quotes only.
@@ -60,6 +60,8 @@ Question: *Does telephone follow-up after hospital discharge reduce readmissions
 
 The agent reported honestly that the largest trial (n = 7,091) found **no** significant reduction in readmissions, only in emergency-department visits, and balanced it with a meta-analysis and a randomized trial.
 
+A second run, on an education question (*Does formative assessment with feedback improve student achievement?*): the agent chose OpenAlex on its own, fetched three papers (two meta-analyses and a controlled study) and verified 6/6 quotes for $0.31 ([report](examples/formative-assessment/Research_Summary_Report.md)).
+
 ## Run it
 
 ```bash
@@ -85,6 +87,7 @@ REST API:
 
 ## Design decisions
 
+- **Two open databases, chosen per question.** Europe PMC is precise for biomedicine; OpenAlex covers every discipline. The agent decides, and falls back to the other when results are thin.
 - **Official APIs only, politely.** No scraping. An honest User-Agent, at most one request per second per host, exponential back-off that honours `Retry-After`, and a SQLite cache, so a repeated question makes no network calls and still works offline.
 - **A manual tool-use loop** instead of a framework, so every step is visible, testable and logged.
 - **The guardrail lives in code, not in the prompt.** The prompt asks for exact quotes; the code checks them.
@@ -97,14 +100,14 @@ src/verified_lit_review/
   agent.py              Claude tool-use loop, guardrail feedback, cost tracking
   prompts/agent_system.md  the execution prompt (kept separate from code)
   db.py                 SQLite: search cache, papers, FTS5 page index, runs, quote_checks
-  sources.py            polite Europe PMC client (rate limit, back-off, offline cache)
+  sources.py            polite Europe PMC + OpenAlex clients (rate limit, back-off, offline cache)
   fetch.py              open-access PDF download (PMC on AWS, OpenAlex) + page indexing
   build_report.py       quote normalization + verified Markdown report
   service.py            one entry point for CLI, UI and API
   api.py                FastAPI REST API
   md_to_docx.py         Markdown → Word, right-to-left Hebrew aware
 app.py                  Streamlit web UI (Hebrew, right-to-left)
-tests/                  40 tests: guardrail, store, sources, fetch, agent loop, API
+tests/                  45 tests: guardrail, store, sources, fetch, agent loop, API
 ```
 
 ## Tests
