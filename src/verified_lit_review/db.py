@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS runs (
     model       TEXT,
     started_at  REAL NOT NULL,
     finished_at REAL,
-    report_path TEXT
+    report_path TEXT,
+    access_code TEXT                        -- which visitor ran it (web UI access codes)
 );
 
 CREATE TABLE IF NOT EXISTS quote_checks (
@@ -87,6 +88,9 @@ class Store:
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(runs)")}
+        if "access_code" not in cols:                       # migrate databases created before v0.2.1
+            self.conn.execute("ALTER TABLE runs ADD COLUMN access_code TEXT")
 
     def close(self):
         self.conn.close()
@@ -160,11 +164,15 @@ class Store:
         return [{"page": r["page"], "text": r["text"], "score": r["score"]} for r in rows]
 
     # ------------------------------------------------------------ audit trail
-    def start_run(self, question, model=None):
+    def start_run(self, question, model=None, access_code=None):
         with self.conn:
-            cur = self.conn.execute("INSERT INTO runs (question, model, started_at) VALUES (?, ?, ?)",
-                                    (question, model, time.time()))
+            cur = self.conn.execute(
+                "INSERT INTO runs (question, model, started_at, access_code) VALUES (?, ?, ?, ?)",
+                (question, model, time.time(), access_code))
         return cur.lastrowid
+
+    def runs_by_code(self, access_code):
+        return self.conn.execute("SELECT COUNT(*) FROM runs WHERE access_code=?", (access_code,)).fetchone()[0]
 
     def finish_run(self, run_id, report_path):
         with self.conn:

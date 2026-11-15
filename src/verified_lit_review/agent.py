@@ -151,8 +151,8 @@ class Agent:
             return {"error": str(e)}
 
     # ------------------------------------------------------------------ loop
-    def run(self, question, n_papers=3, language="he", out_path="Research_Summary_Report.md"):
-        run_id = self.store.start_run(question, self.model)
+    def run(self, question, n_papers=3, language="he", out_path="Research_Summary_Report.md", access_code=None):
+        run_id = self.store.start_run(question, self.model, access_code)
         system = open(PROMPT, encoding="utf-8").read()
         lang = {"he": "Hebrew", "en": "English"}.get(language, language)
         messages = [{"role": "user", "content":
