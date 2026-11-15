@@ -159,3 +159,17 @@ def test_report_shows_database_route_and_why_chosen(setup):
     assert "**Why chosen:** Largest randomized trial found." in report
     assert "**Found in:** Europe PMC · downloaded via: PMC open-data (AWS)" in report
     assert report.index("Mixed evidence.") < report.index("Summary of articles")   # conclusion first
+
+
+def test_report_shows_pico_certainty_and_scope(setup):
+    store, pid, tmp = setup
+    art = article(pid, [{"page": 1, "text": GOOD}])
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)),
+                         reply(tool_call("submit_report", articles=[art], conclusion="Mixed.",
+                                         pico="P: adults; I: calls; C: usual care; O: readmission",
+                                         certainty="Low: non-randomized allocation; imprecision"))])
+    Agent(store, str(tmp), client=client).run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
+    report = (tmp / "r.md").read_text(encoding="utf-8")
+    assert "**PICO:** P: adults; I: calls" in report
+    assert "Certainty of evidence (GRADE-style, approximate):** Low" in report
+    assert "not a systematic review" in report

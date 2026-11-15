@@ -73,6 +73,11 @@ TOOLS = [
     {"name": "submit_report", "strict": True,
      "description": "Submit the final review. Every quote is verified; failures are returned to you.",
      "input_schema": _schema({
+         "pico": {"type": "string",
+                  "description": "the question as PICO: Population; Intervention/exposure; Comparison; Outcome"},
+         "certainty": {"type": "string",
+                       "description": "GRADE-style certainty for the main outcome (high/moderate/low/very low) "
+                                      "with one short reason per downgrade"},
          "conclusion": {"type": "string",
                         "description": "3-5 sentences answering the research question across all papers: "
                                        "the overall direction, how strong and consistent the evidence is, "
@@ -141,8 +146,8 @@ class Agent:
         ok, found, reason = self._check(paper_id, int(page), text)
         return {"verified": ok, "found_on_pages": found, "reason": reason}
 
-    def submit_report(self, articles, conclusion=""):
-        self.conclusion = conclusion
+    def submit_report(self, articles, conclusion="", pico="", certainty=""):
+        self.conclusion, self.pico, self.certainty = conclusion, pico, certainty
         if not articles:
             return {"error": "submit at least one paper; if none can answer the question, say so in a "
                              "paper's relevance field instead of submitting nothing"}
@@ -238,7 +243,8 @@ class Agent:
         if not arts:
             raise RuntimeError("none of the submitted papers could be downloaded and read")
         spec = {"question": question, "language": language, "articles": arts,
-                "conclusion": getattr(self, "conclusion", "")}
+                "conclusion": getattr(self, "conclusion", ""), "pico": getattr(self, "pico", ""),
+                "certainty": getattr(self, "certainty", "")}
         ok_n, rejected = build_report(spec, "", out_path)          # independent re-check on the PDFs
         cost = self.cost()
         self.store.finish_run(run_id, out_path, cost_usd=cost, served_model=self._served())

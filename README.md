@@ -47,18 +47,17 @@ flowchart LR
 Question: *Does telephone follow-up after hospital discharge reduce readmissions?* ([full log](examples/telephone-follow-up/run_log.txt) · [report, Hebrew](examples/telephone-follow-up/Research_Summary_Report.md))
 
 ```text
-🔍 [europepmc] 'telephone follow-up after hospital discharge readmission randomized trial': 10 papers
-🔍 [europepmc] 'post-discharge telephone calls readmission systematic review meta-analysis': 0 papers
-🔍 [europepmc] 'telephone follow-up discharge readmission systematic review': 3 papers
-⬇  10.1186/s12913-016-1650-9: ok, 9 pages
-⬇  10.2196/80529: ok, 14 pages
-⬇  10.1007/s12603-016-0745-7: ok, 8 pages
-📄 10.2196/80529: pages [3, 9] for 'quasi-randomized allocation participants number limitations'
+🔍 [europepmc] 'telephone follow-up after hospital discharge readmission systematic review meta-analysis': 1 papers
+🔍 [europepmc] 'post-discharge telephone call readmission randomized': 4 papers
+🔍 [openalex] 'telephone follow-up discharge readmissions': 10 papers
+⬇  10.1093/ageing/afaa002: ok, 12 pages
+⬇  10.1089/pop.2009.0076: failed            (no open PDF -> the agent picks another paper)
+⬇  10.1186/s12913-021-06156-2: ok, 12 pages
 ✅ submission 1: 7/7 quotes verified
-💲 86,285 input (57,882 from cache) + 4,843 output tokens ≈ $0.26 · 70 s
+💲 74,232 input (50,035 from cache) + 5,011 output tokens ≈ $0.24
 ```
 
-The report opens with a conclusion that does not overstate: a stand-alone call has **not** been shown to reduce readmissions; benefit appears when the call is part of a broader transition bundle. The largest trial (n = 7,091) reduced emergency visits but not readmissions; in the randomized trial only the per-protocol analysis was significant, and the report says that this analysis is open to bias. Each paper states **why it was chosen** and **which database and download route** it came from.
+The report states the question as **PICO**, says plainly that it is a rapid look at three open-access papers and not a systematic review, opens with a cautious **conclusion** (telephone follow-up may moderately reduce readmissions, mostly as part of multi-component programmes; results are inconsistent) and rates the **certainty of evidence as low, GRADE-style**, with a reason for each downgrade. Each paper states **why it was chosen** and **where it came from**; indirect evidence is flagged as such, and "5 of 10 studies effective" comes with the note that two showed the effect only in one subgroup.
 
 A second run, on an education question (*Does formative assessment with feedback improve student achievement?*): the agent chose OpenAlex on its own and verified 6/6 quotes for $0.27 ([report](examples/formative-assessment/Research_Summary_Report.md)).
 

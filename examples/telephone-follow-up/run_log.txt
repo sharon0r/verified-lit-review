@@ -2,19 +2,20 @@ $ python -m verified_lit_review "Does telephone follow-up after hospital dischar
 
 🤖 claude-opus-5-5 · question: Does telephone follow-up after hospital discharge reduce readmissions?
 
-🔍 [europepmc] 'telephone follow-up after hospital discharge readmission randomized trial': 10 papers (network)
-🔍 [europepmc] 'post-discharge telephone calls readmission systematic review meta-analysis': 0 papers (network)
-🔍 [europepmc] 'telephone follow-up discharge readmission systematic review': 3 papers (network)
-🔍 [europepmc] 'aortic valve replacement telephone support 30-day readmission randomized AVRre': 1 papers (network)
-⬇  10.1186/s12913-016-1650-9: ok, 9 pages
-⬇  10.2196/80529: ok, 14 pages
-⬇  10.1007/s12603-016-0745-7: ok, 8 pages
-📄 10.1186/s12913-016-1650-9: pages [1, 7, 2] for 'results number of studies effective in reducing 30-day readmission'
-📄 10.2196/80529: pages [7, 13, 8] for 'results readmission ED visits odds ratio intervention vs control'
-📄 10.1007/s12603-016-0745-7: pages [1, 4, 2] for 'telephone group readmission 30 and 90 days results'
-📄 10.2196/80529: pages [3, 9] for 'quasi-randomized allocation participants number limitations'
+🔍 [europepmc] 'telephone follow-up after hospital discharge readmission systematic review meta-analysis': 1 papers
+(network)
+🔍 [europepmc] 'post-discharge telephone call readmission randomized': 4 papers (network)
+🔍 [openalex] 'telephone follow-up discharge readmissions': 10 papers (network)
+⬇  10.1186/s12913-016-1650-9: cached, 9 pages
+⬇  10.1093/ageing/afaa002: ok, 12 pages
+⬇  10.1089/pop.2009.0076: failed
+⬇  10.1186/s12913-021-06156-2: ok, 12 pages
+📄 10.1186/s12913-016-1650-9: pages [1, 2, 7] for 'results number of studies effective reducing 30-day readmission
+telephone follow-up'
+📄 10.1093/ageing/afaa002: pages [10, 1, 3] for 'telephone follow-up RR readmission meta-analysis'
+📄 10.1186/s12913-021-06156-2: pages [4, 10, 1] for 'readmission rates intervention versus control results limitations'
 ✅ submission 1: 7/7 quotes verified
 
 📝 Report: output/Research_Summary_Report.md
-✅ Quotes verified: 7/7 · papers: 3 · run #1
-💲 86,285 input (57,882 from cache) + 4,843 output tokens ≈ $0.262 · 69.8s
+✅ Quotes verified: 7/7 · papers: 3 · run #3
+💲 74,232 input (50,035 from cache) + 5,011 output tokens ≈ $0.2412 · 345.8s

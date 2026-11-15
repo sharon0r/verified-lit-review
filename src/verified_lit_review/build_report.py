@@ -56,6 +56,9 @@ LABELS = {
                      "וציטוטים שלא אומתו הוסרו. **הממצאים, המסקנה וההסתייגויות** הם סיכום שכתב מודל AI על בסיס המאמרים, "
                      "ואינם נבדקים אוטומטית. יש לבדוק אותם מול המקור לפני כל שימוש מקצועי."),
                conclusion="מסקנה: מה הספרות אומרת על השאלה",
+               certainty="ודאות הראיות (בסגנון GRADE, הערכה משוערת)",
+               scope=("> **היקף:** {n} מאמרים בגישה פתוחה שבחר סוכן AI מתוך תוצאות החיפוש. זו סקירה ראשונית "
+                      "ולא סקירה שיטתית: מאמרים שאינם בגישה פתוחה, וחלק מהסקירות המרכזיות בתחום, עשויים להיות חסרים."),
                summary="**סיכום אימות:** {ok} ציטוטים אומתו ונכללו; {bad} נדחו והוסרו."),
     "en": dict(title="Literature Review Report", count="{} articles", question="Research question", table="Summary of articles",
                cols=["#", "Topic", "Title", "Authors", "Year", "Source"], article="Title",
@@ -68,6 +71,10 @@ LABELS = {
                      "conclusion and caveats** are an AI-written summary of the papers and are not machine-checked; "
                      "verify them against the source before professional use."),
                conclusion="Conclusion: what the literature says",
+               certainty="Certainty of evidence (GRADE-style, approximate)",
+               scope=("> **Scope:** {n} open-access papers chosen by an AI agent from the search results. This is a "
+                      "rapid first look, not a systematic review: papers that are not open access, and some key "
+                      "reviews in the field, may be missing."),
                summary="**Verification summary:** {ok} quotes verified and included; {bad} rejected and removed."),
 }
 
@@ -107,9 +114,13 @@ def build_report(spec, pdf_dir, out):
     md = [f"# {L['title']} ({L['count'].format(len(arts))})", ""]
     if spec.get("question"):
         md += [f"**{L['question']}:** {spec['question']}", ""]
-    md += [L["note"], ""]
+    if spec.get("pico"):
+        md += [f"**PICO:** {spec['pico']}", ""]
+    md += [L["note"], "", L["scope"].format(n=len(arts)), ""]
     if spec.get("conclusion"):                           # the answer first, the evidence after
         md += [f"## {L['conclusion']}", "", spec["conclusion"], ""]
+    if spec.get("certainty"):
+        md += [f"**{L['certainty']}:** {spec['certainty']}", ""]
     md += [f"## {L['table']}", "",
            "| " + " | ".join(L["cols"]) + " |", "|" + "---|" * len(L["cols"])]
     for i, a in enumerate(arts, 1):
