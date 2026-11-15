@@ -1,0 +1,57 @@
+"""Web UI tests (Streamlit AppTest): password gate and daily budget limit. No model calls."""
+import os
+import time
+
+import pytest
+from streamlit.testing.v1 import AppTest
+
+from verified_lit_review import service
+from verified_lit_review.db import Store
+
+APP = os.path.join(os.path.dirname(__file__), "..", "app.py")
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    db = str(tmp_path / "ui.db")
+    monkeypatch.setattr(service, "DB_PATH", db)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-used")
+    monkeypatch.delenv("APP_PASSWORD", raising=False)
+    monkeypatch.setenv("DAILY_RUN_LIMIT", "2")
+    return db
+
+
+def labels(at):
+    return [b.label for b in at.button]
+
+
+def test_password_gate_blocks_until_correct_password(env, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    assert not at.exception
+    assert "▶️ הרץ סקירה" not in labels(at)
+    at.text_input[0].input("wrong").run()
+    assert "▶️ הרץ סקירה" not in labels(at) and at.error[0].value == "סיסמה שגויה"
+    at.text_input[0].input("s3cret").run()
+    assert "▶️ הרץ סקירה" in labels(at)
+
+
+def test_daily_limit_hides_run_button(env):
+    store = Store(env)
+    for _ in range(2):
+        store.start_run("q")
+    store.close()
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    assert not at.exception
+    assert "▶️ הרץ סקירה" not in labels(at)
+    assert "תקרת הריצות" in at.warning[0].value
+
+
+def test_runs_since_counts_only_recent_runs(env):
+    store = Store(env)
+    old = store.start_run("old")
+    store.conn.execute("UPDATE runs SET started_at = 0 WHERE run_id = ?", (old,))
+    store.conn.commit()
+    store.start_run("new")
+    store.close()
+    assert service.runs_since(time.time() - 86400) == 1

@@ -54,6 +54,15 @@ def get_run(run_id, db_path=None):
         store.close()
 
 
+def runs_since(timestamp, db_path=None):
+    """Number of runs started after `timestamp` (used for the daily budget limit)."""
+    store = Store(db_path or DB_PATH)
+    try:
+        return store.conn.execute("SELECT COUNT(*) FROM runs WHERE started_at > ?", (timestamp,)).fetchone()[0]
+    finally:
+        store.close()
+
+
 def list_runs(limit=20, db_path=None):
     store = Store(db_path or DB_PATH)
     try:

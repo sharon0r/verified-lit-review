@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Web UI.   streamlit run app.py   (needs ANTHROPIC_API_KEY in the environment)"""
+"""Web UI.   streamlit run app.py
+
+Configuration (environment variables, or Streamlit secrets when deployed to the cloud):
+  ANTHROPIC_API_KEY   required
+  APP_PASSWORD        optional; when set, visitors must enter it before running anything
+  DAILY_RUN_LIMIT     optional; reviews allowed per 24 hours (default 10) - protects the API budget
+  MAX_PAPERS          optional; upper limit for papers per review (default 3)
+"""
+import hmac
 import os
 import subprocess
 import sys
@@ -9,6 +17,16 @@ import streamlit as st
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 from verified_lit_review import service  # noqa: E402
+
+# Streamlit Cloud keeps secrets in st.secrets; copy them to the environment the agent reads.
+try:
+    for _k in ("ANTHROPIC_API_KEY", "APP_PASSWORD", "DAILY_RUN_LIMIT", "MAX_PAPERS"):
+        if _k in st.secrets and not os.environ.get(_k):
+            os.environ[_k] = str(st.secrets[_k])
+except Exception:  # no secrets file when running locally - environment variables are used instead
+    pass
+DAILY_RUN_LIMIT = int(os.environ.get("DAILY_RUN_LIMIT", "10"))
+MAX_PAPERS = int(os.environ.get("MAX_PAPERS", "3"))
 
 EXAMPLES = [
     "Does telephone follow-up after hospital discharge reduce readmissions?",
@@ -29,7 +47,7 @@ st.markdown("""<style>
 # ------------------------------------------------------------------ sidebar
 with st.sidebar:
     st.header("הגדרות")
-    n_papers = st.slider("מספר מאמרים", 1, 5, 3)
+    n_papers = st.slider("מספר מאמרים", 1, MAX_PAPERS, min(3, MAX_PAPERS))
     language = st.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get, horizontal=True)
     model = MODELS[st.selectbox("מודל", list(MODELS))]
     st.divider()
@@ -51,7 +69,24 @@ for col, ex in zip(cols, EXAMPLES):
 question = st.text_area("שאלת מחקר (באנגלית או בעברית)", key="question", height=80)
 
 if not os.environ.get("ANTHROPIC_API_KEY"):
-    st.error("לא הוגדר ANTHROPIC_API_KEY. הגדירי אותו כמשתנה סביבה והפעילי מחדש.")
+    st.error("לא הוגדר ANTHROPIC_API_KEY (משתנה סביבה, או Secrets בענן).")
+    st.stop()
+
+password = os.environ.get("APP_PASSWORD")
+if password and not st.session_state.get("authorized"):
+    entered = st.text_input("סיסמת גישה להרצה", type="password")
+    if entered and hmac.compare_digest(entered, password):
+        st.session_state.authorized = True
+        st.rerun()
+    if entered:
+        st.error("סיסמה שגויה")
+    st.info("ההרצה משתמשת במפתח API בתשלום, ולכן היא מוגנת בסיסמה. אפשר לעיין בדוגמה ובקוד בגיטהאב.")
+    st.stop()
+
+used = service.runs_since(time.time() - 86400)
+st.caption(f"ריצות ב-24 השעות האחרונות: {used}/{DAILY_RUN_LIMIT}")
+if used >= DAILY_RUN_LIMIT:
+    st.warning("הגעת לתקרת הריצות היומית. נסי שוב מחר.")
     st.stop()
 
 if st.button("▶️ הרץ סקירה", type="primary"):

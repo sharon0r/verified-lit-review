@@ -12,3 +12,7 @@ __pycache__/
 # local SQLite cache / audit trail
 *.db
 .env
+
+# Streamlit secrets (API key, password) - never commit
+.streamlit/secrets.toml
+output/
