@@ -105,7 +105,7 @@ st.markdown("הזינו שאלת מחקר בכל תחום, וסוכן AI יפי�
 
 if "question" not in st.session_state:
     st.session_state.question = next(iter(EXAMPLES.values()))
-st.caption("או בחרו שאלה לדוגמה:")
+st.caption("דוגמאות לשאלות מחקר:")
 cols = st.columns(len(EXAMPLES))
 for col, (label, ex) in zip(cols, EXAMPLES.items()):
     if col.button(label, use_container_width=True):
