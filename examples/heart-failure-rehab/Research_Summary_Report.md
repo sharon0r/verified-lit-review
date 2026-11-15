@@ -29,7 +29,7 @@ _Numbers checked against the paper: 27/27 found_ ✅
 ## 1. Pooled RCT evidence on all-cause and heart failure-related hospital admissions
 
 **Title:** [Exercise-based cardiac rehabilitation for adults with heart failure](https://doi.org/10.1002/14651858.CD003331.pub6)  
-**Authors:** Molloy C, Long L, Mordi IR, Bridges C, Sagar VA, Davies EJ, Coats AJ, Dalal H  
+**Authors:** Molloy C, Long L, Mordi IR, Bridges C, Sagar VA, Davies EJ, Coats AJ, Dalal H, et al.  
 **Source:** The Cochrane database of systematic reviews  
 **Study type:** Cochrane systematic review and meta-analysis; 60 RCTs, 8728 participants; median follow-up 6 months  
 **Why chosen:** It is the most recent and largest Cochrane synthesis of RCTs that directly addresses the question, and it uses GRADE.  
@@ -151,7 +151,7 @@ _Numbers checked against the paper: 12/12 found_ ✅
 ## 5. National registry: rehabilitation referral and acute all-cause readmission
 
 **Title:** [Cardiac rehabilitation for patients with heart failure: association with readmission and mortality risk](https://doi.org/10.1093/ehjqcco/qcab086)  
-**Authors:** Lau Caspar Thygesen, Line Zinckernagel, Hasnain M. Dalal, Kenneth Egstrup, Charlotte Glümer, Morten Grønbæk, Teresa Holmberg, Lars Køber  
+**Authors:** Lau Caspar Thygesen, Line Zinckernagel, Hasnain M. Dalal, Kenneth Egstrup, Charlotte Glümer, Morten Grønbæk, Teresa Holmberg, Lars Køber, et al.  
 **Source:** European Heart Journal - Quality of Care and Clinical Outcomes  
 **Study type:** Nationwide registry cohort (Danish Heart Failure Registry); 33,257 patients with incident heart failure, 2010–2018; 1-year outcomes; multivariable logistic regression  
 **Why chosen:** It is the largest real-world population in the candidate set and reports readmission directly.  

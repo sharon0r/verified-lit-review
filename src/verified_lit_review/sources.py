@@ -111,6 +111,11 @@ def _clean(text):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", text or "")).strip()
 
 
+def author_list(names, limit=8):
+    """The first `limit` authors, with "et al." so a shortened list is not taken as complete."""
+    return ", ".join(names[:limit]) + (", et al." if len(names) > limit else "")
+
+
 def parse_europepmc(data):
     out = []
     for res in data.get("resultList", {}).get("result", []):
@@ -184,8 +189,8 @@ def parse_openalex(data):
             "source": "openalex",
             "source_id": w["id"].rsplit("/", 1)[-1],
             "title": _clean(w.get("display_name")).rstrip("."),
-            "authors": ", ".join(a["author"]["display_name"] for a in (w.get("authorships") or [])[:8]
-                                 if a.get("author", {}).get("display_name")),
+            "authors": author_list([a["author"]["display_name"] for a in (w.get("authorships") or [])
+                                    if a.get("author", {}).get("display_name")]),
             "journal": source.get("display_name") or "",
             "year": str(w.get("publication_year") or ""),
             "doi": (w.get("doi") or "").replace("https://doi.org/", "") or None,
@@ -252,7 +257,7 @@ def parse_pubmed_xml(xml_text):
             "source": "pubmed",
             "source_id": f"PMID:{ids.get('pubmed', '')}",
             "title": _clean("".join(art.find(".//ArticleTitle").itertext())).rstrip("."),
-            "authors": ", ".join(authors[:8]),
+            "authors": author_list(authors),
             "journal": art.findtext(".//Journal/Title") or "",
             "year": year,
             "doi": ids.get("doi") or None,

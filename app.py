@@ -21,7 +21,8 @@ from verified_lit_review import service  # noqa: E402
 
 # Streamlit Cloud keeps secrets in st.secrets; copy them to the environment the agent reads.
 try:
-    for _k in ("ANTHROPIC_API_KEY", "APP_PASSWORD", "DAILY_RUN_LIMIT", "MAX_PAPERS"):
+    for _k in ("ANTHROPIC_API_KEY", "APP_PASSWORD", "DAILY_RUN_LIMIT", "MAX_PAPERS", "RUNS_PER_VISITOR",
+               "MAX_COST_PER_RUN"):
         if _k in st.secrets and not os.environ.get(_k):
             os.environ[_k] = str(st.secrets[_k])
 except Exception:  # no secrets file when running locally - environment variables are used instead
@@ -34,7 +35,27 @@ _ROOT = os.path.dirname(os.path.abspath(__file__))
 DEMOS = {"בריאות: מעקב טלפוני אחרי שחרור": os.path.join(_ROOT, "examples", "telephone-follow-up",
                                                           "Research_Summary_Report.md"),
          "חינוך: הערכה מעצבת ומשוב": os.path.join(_ROOT, "examples", "formative-assessment",
-                                                    "Research_Summary_Report.md")}
+                                                    "Research_Summary_Report.md"),
+         "רפואה: שיקום לב באי-ספיקת לב (English)": os.path.join(_ROOT, "examples", "heart-failure-rehab",
+                                                               "Research_Summary_Report.md")}
+# The agent's own error messages are English; visitors get them in Hebrew.
+ERRORS_HE = {"question is empty": "השאלה ריקה. כתבו שאלת מחקר.",
+             "longer than": "השאלה ארוכה מדי.",
+             "n_papers": "מספר המאמרים חייב להיות בין 1 ל-5.",
+             "without submitting": "הסוכן לא הצליח להשלים דו\"ח לשאלה הזו. נסו לנסח אותה אחרת.",
+             "could be downloaded": "לא הצלחנו להוריד אף אחד מהמאמרים שנבחרו. נסו שאלה אחרת.",
+             "cost limit": "הריצה נעצרה כי הגיעה לתקרת העלות לריצה.",
+             "declined": "המודל סירב לבקשה הזו.",
+             "searchable english keywords": "לא נמצאו בשאלה מילות חיפוש. נסו לכתוב אותה באנגלית."}
+
+
+def hebrew_error(message):
+    return next((he for en, he in ERRORS_HE.items() if en in message.lower()),
+                "הריצה נכשלה. נסו שוב או נסחו את השאלה אחרת.")
+
+
+def runs_text(n):
+    return "ריצה אחת" if n == 1 else f"{n} ריצות"
 
 EXAMPLES = {  # short Hebrew label -> the question sent to the agent
     "🏥 מעקב טלפוני אחרי שחרור": "Does telephone follow-up after hospital discharge reduce readmissions?",
@@ -53,7 +74,11 @@ ICONS = {"search": "🔍", "fetch": "⬇️", "retrieve": "📄", "verify": "✅
 st.set_page_config(page_title="סקירת ספרות מאומתת", page_icon="📚", layout="wide")
 st.markdown("""<style>
   .block-container, section[data-testid="stSidebar"] {direction: rtl; text-align: right;}
-  blockquote, code {direction: ltr; text-align: left;}
+  code {direction: ltr; text-align: left;}
+  /* each paragraph takes its direction from its own text: Hebrew right-to-left, an English report
+     or an English quote left-to-right */
+  .stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th, .stMarkdown h1, .stMarkdown h2,
+  .stMarkdown h3 {unicode-bidi: plaintext; text-align: start;}
   [data-testid="stMetricValue"] {direction: ltr;}
 </style>""", unsafe_allow_html=True)
 
@@ -73,7 +98,7 @@ with st.sidebar:
 # ------------------------------------------------------------------ main
 st.title("📚 סקירת ספרות עם ציטוטים מאומתים")
 st.markdown(AUTHOR)
-st.markdown("כתבו שאלת מחקר בכל תחום, ותקבלו תוך דקה-שתיים סיכום של עד 5 מאמרים אקדמיים שעברו שיפוט עמיתים "
+st.markdown("כתבו שאלת מחקר בכל תחום, ותקבלו תוך כמה דקות סיכום של עד 5 מאמרים אקדמיים שעברו שיפוט עמיתים "
             "וזמינים לקריאה חופשית. **כל ציטוט בדו\"ח נבדק אוטומטית, מילה במילה, מול העמוד המקורי ב-PDF**, "
             "וציטוט שלא נמצא נמחק.")
 
@@ -114,10 +139,14 @@ if password and not st.session_state.get("authorized"):
         st.session_state.authorized = True
         st.rerun()
     if entered:
-        st.session_state.failed_logins = failures + 1
-        time.sleep(1.5)                          # slows down guessing
+        # every widget change reruns the script; count a password only once, not on each rerun
+        if entered != st.session_state.get("last_attempt"):
+            st.session_state.last_attempt = entered
+            st.session_state.failed_logins = failures + 1
+            time.sleep(1.5)                      # slows down guessing
         st.error("סיסמה שגויה")
     st.info("ההרצה משתמשת במפתח API בתשלום, ולכן היא מוגנת בסיסמה. אפשר לעיין בדוגמה ובקוד בגיטהאב.")
+    show_demo()
     st.stop()
 
 used = service.runs_since(time.time() - 86400)
@@ -126,8 +155,7 @@ used = service.runs_since(time.time() - 86400)
 per_visitor = None if password else RUNS_PER_VISITOR
 my_runs = st.session_state.get("my_runs", 0)
 left_today = max(DAILY_RUN_LIMIT - used, 0)
-st.caption((f"יש לכם ריצת ניסיון אחת · " if per_visitor == 1 and my_runs == 0 else "")
-           + f"היום נותרו באתר {left_today} ריצות מתוך {DAILY_RUN_LIMIT}")
+mine_left = None if per_visitor is None else max(per_visitor - my_runs, 0)
 can_run = True
 if used >= DAILY_RUN_LIMIT:
     st.warning("הריצות של היום נוצלו. אפשר לעיין בדוגמה המוכנה, או לנסות שוב מחר.")
@@ -135,9 +163,11 @@ if used >= DAILY_RUN_LIMIT:
 elif per_visitor is not None and my_runs >= per_visitor:
     st.info("ריצת הניסיון שלכם נוצלה. תודה! אפשר לעיין בדוגמה המוכנה ובקוד בגיטהאב.")
     can_run = False
+else:
+    st.caption((f"נותרה לכם {runs_text(mine_left)} · " if mine_left else "")
+               + f"היום נותרו באתר {runs_text(left_today)} מתוך {DAILY_RUN_LIMIT}")
 
 if can_run and st.button("▶️ התחילו סקירה", type="primary"):
-    st.session_state.my_runs = my_runs + 1
     if service.runs_since(time.time() - 86400) >= DAILY_RUN_LIMIT:   # re-check right before spending
         st.warning("הריצות של היום נוצלו.")
         st.stop()
@@ -146,13 +176,21 @@ if can_run and st.button("▶️ התחילו סקירה", type="primary"):
             st.write(f"{ICONS.get(kind, '•')} {msg}")
         try:
             st.session_state.result = service.run_review(question, n_papers, language, model=MODEL, on_event=on_event)
+            st.session_state.my_runs = my_runs + 1
             status.update(label="הסקירה הושלמה", state="complete", expanded=False)
-        except (ValueError, RuntimeError) as e:          # our own, user-readable messages
+        except ValueError as e:                          # the question was refused before any model call
+            status.update(label="הריצה לא התחילה", state="error")
+            st.error(hebrew_error(str(e)))
+        except RuntimeError as e:                        # the run started (and cost money), then failed
+            st.session_state.my_runs = my_runs + 1
             status.update(label="הריצה נכשלה", state="error")
-            st.error(str(e))
+            st.error(hebrew_error(str(e)))
         except Exception:  # noqa: BLE001 - no internal details on a public page
+            st.session_state.my_runs = my_runs + 1
             status.update(label="הריצה נכשלה", state="error")
             st.error("אירעה שגיאה בלתי צפויה. נסו שוב בעוד דקה.")
+    if st.session_state.get("result") and st.session_state.get("my_runs", 0) > my_runs:
+        st.rerun()                                       # refresh the counters above for the new state
 
 r = st.session_state.get("result")
 if not r:            # after a run the visitor's own report replaces the example, so it is not in the way
@@ -180,6 +218,9 @@ if r:
                 d2.download_button("הורדה כ-Word", f.read(), "Research_Summary_Report.docx")
     with tab_audit:
         run = service.get_run(r["run_id"])
+        if run is None:                         # the database was reset (e.g. the app restarted)
+            st.info("תיעוד הריצה כבר לא זמין, כי האפליקציה הופעלה מחדש. הדו\"ח עצמו נשמר בלשונית הראשונה.")
+            st.stop()
         st.caption(f"ריצה #{r['run_id']} · מודל {run['model']} · "
                    f"{time.strftime('%d/%m/%Y %H:%M', time.localtime(run['started_at']))} · נשמר ב-SQLite")
         st.dataframe([{"✅": "✅" if q["verified"] else "❌", "עמוד": q["claimed_page"], "ציטוט": q["text"],
@@ -190,9 +231,10 @@ if r:
             st.json(r["rejected"])
     with tab_how:
         st.markdown("""
-1. **סוכן (Claude):** מפרק את השאלה, מחפש ב-Europe PMC (רפואה ומדעי החיים) או ב-OpenAlex (כל התחומים) ובוחר מאמרים לפי התקציר.
-2. **הורדה:** PDF בגישה פתוחה מ-PMC (AWS) או OpenAlex; כל עמוד נשמר ב-SQLite (FTS5).
+1. **סוכן (Claude Opus 5.5):** מנסח את השאלה כ-PICO ומחפש בשלושה מאגרים: PubMed (סקירות שיטתיות ומטה-אנליזות עדכניות), Europe PMC (רפואה ומדעי החיים) ו-OpenAlex (כל התחומים). הוא בוחר מאמרים לפי התקציר.
+2. **הורדה:** PDF בגישה פתוחה מ-PMC (AWS), מהקישור שבתוצאת החיפוש או דרך OpenAlex. כל עמוד נשמר ב-SQLite (FTS5).
 3. **RAG:** הסוכן שולף רק את העמודים הרלוונטיים וכותב ממצאים וציטוטים על בסיסם.
-4. **בקרה:** כל ציטוט נבדק מילה במילה ומספר במספר מול העמוד. ציטוט שגוי חוזר לסוכן לתיקון, ובבדיקה הסופית נשאר רק מה שאומת.
-5. **תיעוד:** כל בדיקה נשמרת במסד הנתונים עם המודל, הזמן והעלות.
+4. **בקרה:** כל ציטוט נבדק מילה במילה מול העמוד. כל מספר בממצאים נבדק מול המספרים שבמאמר, וכל מספר במסקנה חייב להופיע בממצא או בציטוט מאומת. מה שלא עבר חוזר לסוכן לתיקון, ובדו"ח נשאר רק מה שאומת.
+5. **הגבלות:** תקרת עלות לכל ריצה, מגבלה יומית לאתר כולו, ומספר מוגבל של שלבים לסוכן.
+6. **תיעוד:** כל בדיקה נשמרת במסד הנתונים עם המודל, הזמן והעלות.
 """)

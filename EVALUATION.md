@@ -30,13 +30,18 @@ as a first-look review. The reviewers are **AI agents, not human experts.**
 | 3 | + PubMed search for recent systematic reviews (found Cochrane 2024) | cardiac rehab in heart failure | physician agent | 8.5 / 10 |
 | 4 | + number guardrail, absolute effects, weighing by design, precise GRADE terms | cardiac rehab in heart failure | physician agent | 9 / 10 |
 
+**Read the scores as a development log, not as a benchmark.** Rounds used different questions and
+different reviewer agents, one report per round; rounds 3 and 4 changed the prompt after reviews of
+the heart-failure question and were then scored on that same question, so part of the gain may not
+carry over to other questions.
+
 **What each round found, and what changed**
 
 1. Misread statistics (an NNT interval "crossing zero"), conclusions stronger than the evidence, no
    statement of scope. -> Statistics rules, PICO, certainty rating, scope statement.
 2. "Reduces" despite low certainty, overlapping reviews presented as independent confirmation, an SMD
    reported in "points", "no adverse events reported" read as "safe". -> Six reporting rules.
-3. Both reviewers: the newest and broadest reviews (e.g. Cochrane 2024) were missing, so the conclusion
+3. Rounds 1-2 (both reviewers) and round 3: the newest and broadest reviews (e.g. Cochrane 2024) were missing, so the conclusion
    was too pessimistic. -> PubMed search restricted to recent systematic reviews; the conclusion changed
    from "inconsistent" to "probably reduces" (RR 0.69, moderate certainty).
 4. No absolute effect, misused GRADE terms, an observational cohort weighed like trials. -> Prompt rules
@@ -49,7 +54,8 @@ against the paper.
 
 ## 3. Which model: cost against quality
 
-Same question (cardiac rehab in heart failure), same prompt and guardrails, same AI physician reviewer.
+Same question (cardiac rehab in heart failure), same prompt and guardrails, same AI physician reviewer;
+one run per row, and the number of papers differs between rows, so this is a rough comparison.
 
 | Model | Papers | Cost per run | Quotes verified | Score | Rely on it as a first look? |
 |---|---|---|---|---|---|

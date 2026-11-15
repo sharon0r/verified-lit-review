@@ -66,6 +66,26 @@ def test_open_mode_allows_one_run_per_visitor(env):
     assert "נוצלה" in at.info[0].value
 
 
+def test_refused_question_does_not_use_up_the_visitors_run(env):
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    at.text_area[0].input("   ").run()
+    next(b for b in at.button if b.label == "▶️ התחילו סקירה").click().run()
+    assert not at.exception
+    assert at.error[0].value == "השאלה ריקה. כתבו שאלת מחקר."     # Hebrew, not the internal English text
+    assert "my_runs" not in at.session_state or at.session_state["my_runs"] == 0
+    assert "▶️ התחילו סקירה" in labels(at)                          # the trial run is still there
+
+
+def test_changing_a_setting_is_not_counted_as_another_wrong_password(env, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    at.text_input[0].input("wrong").run()
+    for n in (1, 2, 3, 4):
+        at.slider[0].set_value(n).run()
+    assert at.session_state["failed_logins"] == 1
+    assert len(at.expander) == 1                                       # the example is offered behind the gate
+
+
 def test_demo_report_is_shown_without_any_key(env, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY")
     at = AppTest.from_file(APP, default_timeout=30).run()

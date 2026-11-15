@@ -26,5 +26,11 @@ def test_invented_or_computed_numbers_are_flagged():
     assert bad == ["0.59", "79", "1000", "13"]
 
 
+def test_long_author_list_is_marked_as_shortened():
+    from verified_lit_review.sources import author_list
+    assert author_list([f"A{i}" for i in range(11)]) == "A0, A1, A2, A3, A4, A5, A6, A7, et al."
+    assert author_list(["Doe J", "Roe R"]) == "Doe J, Roe R"
+
+
 def test_text_without_numbers_has_nothing_to_check():
     assert numbers.check("Participants described feeling more connected.", numbers.PaperNumbers(PAGES)) == ([], [])
