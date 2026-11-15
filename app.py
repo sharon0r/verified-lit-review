@@ -154,9 +154,9 @@ if can_run and st.button("▶️ התחילו סקירה", type="primary"):
             status.update(label="הריצה נכשלה", state="error")
             st.error("אירעה שגיאה בלתי צפויה. נסו שוב בעוד דקה.")
 
-show_demo()
-
 r = st.session_state.get("result")
+if not r:            # after a run the visitor's own report replaces the example, so it is not in the way
+    show_demo()
 if r:
     total = r["verified"] + len(r["rejected"])
     c = st.columns(5)

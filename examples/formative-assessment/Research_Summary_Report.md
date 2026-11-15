@@ -12,13 +12,13 @@
 
 | # | נושא | שם המאמר | מחברים | שנה | מקור |
 |---|---|---|---|---|---|
-| 1 | השפעת הערכה מעצבת על הישגים בקריאה בכיתות גן עד י"ב | The effectiveness of formative assessment for enhancing reading achievement in K-12 classrooms: A meta-analysis | Qianying Xuan, Alan Cheung, Dan Sun | 2022 | Frontiers in Psychology |
-| 2 | השפעת סוגי משוב מעצב (מורה, תלמיד, מחשב, משולב) על הלמידה | The Effect of Formative Assessment Practices on Student Learning: A Meta-Analysis Study | Pınar Karaman | 2021 | International Journal of Assessment Tools in Education |
-| 3 | יישום הערכה מעצבת בכיתות לאחר פיתוח מקצועי של מורים – הישגים במתמטיקה | The effect of a formative assessment practice on student achievement in mathematics | Erika Boström, Torulf Palm | 2023 | Frontiers in Education |
+| 1 | השפעת הערכה מעצבת על הישגים בקריאה בכיתות גן עד י"ב | [The effectiveness of formative assessment for enhancing reading achievement in K-12 classrooms: A meta-analysis](https://doi.org/10.3389/fpsyg.2022.990196) | Qianying Xuan, Alan Cheung, Dan Sun | 2022 | Frontiers in Psychology |
+| 2 | השפעת סוגי משוב מעצב (מורה, תלמיד, מחשב, משולב) על הלמידה | [The Effect of Formative Assessment Practices on Student Learning: A Meta-Analysis Study](https://doi.org/10.21449/ijate.870300) | Pınar Karaman | 2021 | International Journal of Assessment Tools in Education |
+| 3 | יישום הערכה מעצבת בכיתות לאחר פיתוח מקצועי של מורים – הישגים במתמטיקה | [The effect of a formative assessment practice on student achievement in mathematics](https://doi.org/10.3389/feduc.2023.1101192) | Erika Boström, Torulf Palm | 2023 | Frontiers in Education |
 
 ## 1. השפעת הערכה מעצבת על הישגים בקריאה בכיתות גן עד י"ב
 
-**שם המאמר:** The effectiveness of formative assessment for enhancing reading achievement in K-12 classrooms: A meta-analysis  
+**שם המאמר:** [The effectiveness of formative assessment for enhancing reading achievement in K-12 classrooms: A meta-analysis](https://doi.org/10.3389/fpsyg.2022.990196)  
 **מחברים:** Qianying Xuan, Alan Cheung, Dan Sun  
 **מקור:** Frontiers in Psychology  
 **סוג המחקר:** מטא-אנליזה של 48 מחקרים (ניסויים מבוקרים בהקצאה אקראית ומחקרים מעין-ניסויים) עם 116,051 תלמידים, כולל מטא-רגרסיה  
@@ -50,7 +50,7 @@
 
 ## 2. השפעת סוגי משוב מעצב (מורה, תלמיד, מחשב, משולב) על הלמידה
 
-**שם המאמר:** The Effect of Formative Assessment Practices on Student Learning: A Meta-Analysis Study  
+**שם המאמר:** [The Effect of Formative Assessment Practices on Student Learning: A Meta-Analysis Study](https://doi.org/10.21449/ijate.870300)  
 **מחברים:** Pınar Karaman  
 **מקור:** International Journal of Assessment Tools in Education  
 **סוג המחקר:** מטא-אנליזה של 32 מחקרים ניסוייים ומעין-ניסויים מטורקיה (47 גדלי השפעה, 3253 משתתפים), מבית הספר היסודי ועד ההשכלה הגבוהה  
@@ -82,7 +82,7 @@
 
 ## 3. יישום הערכה מעצבת בכיתות לאחר פיתוח מקצועי של מורים – הישגים במתמטיקה
 
-**שם המאמר:** The effect of a formative assessment practice on student achievement in mathematics  
+**שם המאמר:** [The effect of a formative assessment practice on student achievement in mathematics](https://doi.org/10.3389/feduc.2023.1101192)  
 **מחברים:** Erika Boström, Torulf Palm  
 **מקור:** Frontiers in Education  
 **סוג המחקר:** מחקר שדה עם קבוצת ביקורת: 14 מורים לכיתה ז' נבחרו בדגימה אקראית מרובדת מתוך 35 בעירייה שוודית אחת. נערכו מבחן מקדים ומבחן מסכם לאורך שנת לימודים אחת, והניתוח נעשה ב-ANCOVA.  

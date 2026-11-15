@@ -20,15 +20,15 @@ _Numbers checked against the paper: 27/27 found_ ✅
 
 | # | Topic | Title | Authors | Year | Source |
 |---|---|---|---|---|---|
-| 1 | Pooled RCT evidence on all-cause and heart failure-related hospital admissions | Exercise-based cardiac rehabilitation for adults with heart failure | Molloy C, Long L, Mordi IR, Bridges C, Sagar VA, Davies EJ, Coats AJ, Dalal H | 2024 | The Cochrane database of systematic reviews |
-| 2 | Comparison of rehabilitation delivery modes (centre, home, hybrid; exercise types) on readmission | Effects of exercise based cardiac rehabilitation delivery modes on chronic heart failure: a systematic review and network meta-analysis | Hua C, Huang W, Chen Z, Cao D, Jia J, Chen X, Yang J, Zhang L | 2024 | Scientific reports |
-| 3 | Recent RCT of exercise training in HFpEF: hospitalizations | Combined endurance and resistance exercise training in heart failure with preserved ejection fraction: a randomized controlled trial | Edelmann F, Wachter R, Duvinage A, Mueller S, Fegers-Wustrow I, Schwarz S, Christle JW, Pieske-Kraigher E, Seyfarth M, Knapp M, Dörr M, Nolte K, Düngen HD, Herrmann-Lingen C, Esefeld K, Hagendorff A, Haykowsky MJ, Hasenfuss G, Holzendorf V, Prettin C, Mende M, Pieske B, Halle M. | 2025 | Nature medicine |
-| 4 | Real-world post-acute HFrEF: rehabilitation participation and heart failure rehospitalization | Outcomes With Multidisciplinary Cardiac Rehabilitation in Post-acute Systolic Heart Failure Patients-A Retrospective Propensity Score-Matched Study | Chen SM, Wang LY, Liaw MY, Wu MK, Wu PJ, Wei CL, Chen AN, Su TL, Chang JK, Yang TH, Chen C, Cheng CI, Chen PC, Chen YL. | 2022 | Frontiers in cardiovascular medicine |
-| 5 | National registry: rehabilitation referral and acute all-cause readmission | Cardiac rehabilitation for patients with heart failure: association with readmission and mortality risk | Lau Caspar Thygesen, Line Zinckernagel, Hasnain M. Dalal, Kenneth Egstrup, Charlotte Glümer, Morten Grønbæk, Teresa Holmberg, Lars Køber | 2021 | European Heart Journal - Quality of Care and Clinical Outcomes |
+| 1 | Pooled RCT evidence on all-cause and heart failure-related hospital admissions | [Exercise-based cardiac rehabilitation for adults with heart failure](https://doi.org/10.1002/14651858.CD003331.pub6) | Molloy C, Long L, Mordi IR, Bridges C, Sagar VA, Davies EJ, Coats AJ, Dalal H | 2024 | The Cochrane database of systematic reviews |
+| 2 | Comparison of rehabilitation delivery modes (centre, home, hybrid; exercise types) on readmission | [Effects of exercise based cardiac rehabilitation delivery modes on chronic heart failure: a systematic review and network meta-analysis](https://doi.org/10.1038/s41598-024-82608-z) | Hua C, Huang W, Chen Z, Cao D, Jia J, Chen X, Yang J, Zhang L | 2024 | Scientific reports |
+| 3 | Recent RCT of exercise training in HFpEF: hospitalizations | [Combined endurance and resistance exercise training in heart failure with preserved ejection fraction: a randomized controlled trial](https://doi.org/10.1038/s41591-024-03342-7) | Edelmann F, Wachter R, Duvinage A, Mueller S, Fegers-Wustrow I, Schwarz S, Christle JW, Pieske-Kraigher E, Seyfarth M, Knapp M, Dörr M, Nolte K, Düngen HD, Herrmann-Lingen C, Esefeld K, Hagendorff A, Haykowsky MJ, Hasenfuss G, Holzendorf V, Prettin C, Mende M, Pieske B, Halle M. | 2025 | Nature medicine |
+| 4 | Real-world post-acute HFrEF: rehabilitation participation and heart failure rehospitalization | [Outcomes With Multidisciplinary Cardiac Rehabilitation in Post-acute Systolic Heart Failure Patients-A Retrospective Propensity Score-Matched Study](https://doi.org/10.3389/fcvm.2022.763217) | Chen SM, Wang LY, Liaw MY, Wu MK, Wu PJ, Wei CL, Chen AN, Su TL, Chang JK, Yang TH, Chen C, Cheng CI, Chen PC, Chen YL. | 2022 | Frontiers in cardiovascular medicine |
+| 5 | National registry: rehabilitation referral and acute all-cause readmission | [Cardiac rehabilitation for patients with heart failure: association with readmission and mortality risk](https://doi.org/10.1093/ehjqcco/qcab086) | Lau Caspar Thygesen, Line Zinckernagel, Hasnain M. Dalal, Kenneth Egstrup, Charlotte Glümer, Morten Grønbæk, Teresa Holmberg, Lars Køber | 2021 | European Heart Journal - Quality of Care and Clinical Outcomes |
 
 ## 1. Pooled RCT evidence on all-cause and heart failure-related hospital admissions
 
-**Title:** Exercise-based cardiac rehabilitation for adults with heart failure  
+**Title:** [Exercise-based cardiac rehabilitation for adults with heart failure](https://doi.org/10.1002/14651858.CD003331.pub6)  
 **Authors:** Molloy C, Long L, Mordi IR, Bridges C, Sagar VA, Davies EJ, Coats AJ, Dalal H  
 **Source:** The Cochrane database of systematic reviews  
 **Study type:** Cochrane systematic review and meta-analysis; 60 RCTs, 8728 participants; median follow-up 6 months  
@@ -62,7 +62,7 @@ _Numbers checked against the paper: 25/25 found_ ✅
 
 ## 2. Comparison of rehabilitation delivery modes (centre, home, hybrid; exercise types) on readmission
 
-**Title:** Effects of exercise based cardiac rehabilitation delivery modes on chronic heart failure: a systematic review and network meta-analysis  
+**Title:** [Effects of exercise based cardiac rehabilitation delivery modes on chronic heart failure: a systematic review and network meta-analysis](https://doi.org/10.1038/s41598-024-82608-z)  
 **Authors:** Hua C, Huang W, Chen Z, Cao D, Jia J, Chen X, Yang J, Zhang L  
 **Source:** Scientific reports  
 **Study type:** Systematic review and network meta-analysis; 33 RCTs, 5,900 participants with chronic heart failure; readmission reported in 7 trials  
@@ -92,7 +92,7 @@ _Numbers checked against the paper: 4/4 found_ ✅
 
 ## 3. Recent RCT of exercise training in HFpEF: hospitalizations
 
-**Title:** Combined endurance and resistance exercise training in heart failure with preserved ejection fraction: a randomized controlled trial  
+**Title:** [Combined endurance and resistance exercise training in heart failure with preserved ejection fraction: a randomized controlled trial](https://doi.org/10.1038/s41591-024-03342-7)  
 **Authors:** Edelmann F, Wachter R, Duvinage A, Mueller S, Fegers-Wustrow I, Schwarz S, Christle JW, Pieske-Kraigher E, Seyfarth M, Knapp M, Dörr M, Nolte K, Düngen HD, Herrmann-Lingen C, Esefeld K, Hagendorff A, Haykowsky MJ, Hasenfuss G, Holzendorf V, Prettin C, Mende M, Pieske B, Halle M.  
 **Source:** Nature medicine  
 **Study type:** Multicentre RCT; 322 patients with HFpEF (mean age 70 years, 59.6% women); 12 months of combined endurance and resistance training vs usual care  
@@ -121,7 +121,7 @@ _Numbers checked against the paper: 17/17 found_ ✅
 
 ## 4. Real-world post-acute HFrEF: rehabilitation participation and heart failure rehospitalization
 
-**Title:** Outcomes With Multidisciplinary Cardiac Rehabilitation in Post-acute Systolic Heart Failure Patients-A Retrospective Propensity Score-Matched Study  
+**Title:** [Outcomes With Multidisciplinary Cardiac Rehabilitation in Post-acute Systolic Heart Failure Patients-A Retrospective Propensity Score-Matched Study](https://doi.org/10.3389/fcvm.2022.763217)  
 **Authors:** Chen SM, Wang LY, Liaw MY, Wu MK, Wu PJ, Wei CL, Chen AN, Su TL, Chang JK, Yang TH, Chen C, Cheng CI, Chen PC, Chen YL.  
 **Source:** Frontiers in cardiovascular medicine  
 **Study type:** Retrospective propensity-score-matched cohort, single centre in Taiwan; 518 matched patients (137 in the rehabilitation group); median follow-up 3.04 years  
@@ -150,7 +150,7 @@ _Numbers checked against the paper: 12/12 found_ ✅
 
 ## 5. National registry: rehabilitation referral and acute all-cause readmission
 
-**Title:** Cardiac rehabilitation for patients with heart failure: association with readmission and mortality risk  
+**Title:** [Cardiac rehabilitation for patients with heart failure: association with readmission and mortality risk](https://doi.org/10.1093/ehjqcco/qcab086)  
 **Authors:** Lau Caspar Thygesen, Line Zinckernagel, Hasnain M. Dalal, Kenneth Egstrup, Charlotte Glümer, Morten Grønbæk, Teresa Holmberg, Lars Køber  
 **Source:** European Heart Journal - Quality of Care and Clinical Outcomes  
 **Study type:** Nationwide registry cohort (Danish Heart Failure Registry); 33,257 patients with incident heart failure, 2010–2018; 1-year outcomes; multivariable logistic regression  

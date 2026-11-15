@@ -162,6 +162,16 @@ def test_report_shows_database_route_and_why_chosen(setup):
     assert report.index("Mixed evidence.") < report.index("Summary of articles")   # conclusion first
 
 
+def test_paper_titles_are_clickable_links(setup):
+    store, pid, tmp = setup
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)),
+                         reply(tool_call("submit_report", articles=[article(pid, [{"page": 1, "text": GOOD}])]))])
+    Agent(store, str(tmp), client=client).run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
+    report = (tmp / "r.md").read_text(encoding="utf-8")
+    link = "[Calls after discharge](https://doi.org/10.1/tel)"
+    assert f"| {link} |" in report and f"**Title:** {link}" in report     # summary table and article section
+
+
 def test_report_shows_pico_certainty_and_scope(setup):
     store, pid, tmp = setup
     art = article(pid, [{"page": 1, "text": GOOD}])

@@ -270,7 +270,7 @@ class Agent:
                 continue
             arts.append({"file": os.path.abspath(p["pdf_path"]), "title": p["title"], "authors": p.get("authors"),
                          "year": p.get("year"), "journal": p.get("journal"), "doi": p.get("doi"),
-                         "topic": a["topic"], "study_type": a["study_type"], "bullets": a["bullets"],
+                         "pmcid": p.get("pmcid"), "topic": a["topic"], "study_type": a["study_type"], "bullets": a["bullets"],
                          "why_chosen": a.get("why_chosen", ""),
                          "numbers": dict(zip(("verified", "unverified"), self._number_check(a))),
                          "database": DATABASE_NAMES.get(p.get("source"), p.get("source")),

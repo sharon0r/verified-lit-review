@@ -117,6 +117,21 @@ def number_line(L, result, label="numbers", missing="not_found"):
     return line + (f" · ⚠️ **{L[missing]}:** {', '.join(bad)}" if bad else " ✅")
 
 
+def paper_url(a):
+    """A link a reader can click: the DOI resolver, else the PMC article page, else none."""
+    if a.get("doi"):
+        return f"https://doi.org/{a['doi']}"
+    if a.get("pmcid"):
+        return f"https://pmc.ncbi.nlm.nih.gov/articles/{a['pmcid']}/"
+    return a.get("url") or ""
+
+
+def linked_title(a):
+    title = a["title"].replace("[", "\\[").replace("]", "\\]")
+    url = paper_url(a)
+    return f"[{title}]({url})" if url else title
+
+
 def md_cell(text):
     return str(text).replace("|", "\\|").replace("\n", " ")
 
@@ -145,7 +160,7 @@ def build_report(spec, pdf_dir, out):
            "| " + " | ".join(L["cols"]) + " |", "|" + "---|" * len(L["cols"])]
     for i, a in enumerate(arts, 1):
         md.append("| " + " | ".join(md_cell(x) for x in
-                  [i, a.get("topic", ""), a["title"], a.get("authors", ""), a.get("year", ""),
+                  [i, a.get("topic", ""), linked_title(a), a.get("authors", ""), a.get("year", ""),
                    a.get("journal", "")]) + " |")
     md.append("")
 
@@ -158,7 +173,7 @@ def build_report(spec, pdf_dir, out):
             pages = [norm(p.get_text()) for p in doc]
         off = int(a.get("page_offset") or 0)
         md += [f"## {i}. {a.get('topic', a['title'])}", "",
-               f"**{L['article']}:** {a['title']}  ", f"**{L['authors']}:** {a.get('authors', '')}  ",
+               f"**{L['article']}:** {linked_title(a)}  ", f"**{L['authors']}:** {a.get('authors', '')}  ",
                f"**{L['source']}:** {a.get('journal', '')}  "]
         if a.get("study_type"):
             md.append(f"**{L['type']}:** {a['study_type']}  ")

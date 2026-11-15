@@ -18,13 +18,13 @@
 
 | # | נושא | שם המאמר | מחברים | שנה | מקור |
 |---|---|---|---|---|---|
-| 1 | התערבויות במעבר מבית החולים לקהילה בקשישים, כולל מעקב טלפוני, והשפעתן על אשפוזים חוזרים | Successful care transitions for older people: a systematic review and meta-analysis of the effects of interventions that support medication continuity | Tomlinson J, Cheong VL, Fylan B, Silcock J, Smith H, Karban K, Blenkinsopp A. | 2020 | Age and ageing |
-| 2 | מעקב טלפוני (לבד או עם רכיבים נוספים) ואשפוז חוזר תוך 30 יום בחולים כרוניים | Effectiveness of interventions utilising telephone follow up in reducing hospital readmission within 30 days for individuals with chronic disease: a systematic review | Jayakody A, Bryant J, Carey M, Hobden B, Dodd N, Sanson-Fisher R. | 2016 | BMC health services research |
-| 3 | ייעוץ רוקח ושיחות מעקב טלפוני לאחר שחרור במטופלים הנוטלים נוגדי קרישה: אשפוזים חוזרים ודימומים | Impact of pharmacist-conducted anticoagulation patient education and telephone follow-up on transitions of care: a randomized controlled trial | Karaoui LR, Ramia E, Mansour H, Haddad N, Chamoun N. | 2021 | BMC health services research |
+| 1 | התערבויות במעבר מבית החולים לקהילה בקשישים, כולל מעקב טלפוני, והשפעתן על אשפוזים חוזרים | [Successful care transitions for older people: a systematic review and meta-analysis of the effects of interventions that support medication continuity](https://doi.org/10.1093/ageing/afaa002) | Tomlinson J, Cheong VL, Fylan B, Silcock J, Smith H, Karban K, Blenkinsopp A. | 2020 | Age and ageing |
+| 2 | מעקב טלפוני (לבד או עם רכיבים נוספים) ואשפוז חוזר תוך 30 יום בחולים כרוניים | [Effectiveness of interventions utilising telephone follow up in reducing hospital readmission within 30 days for individuals with chronic disease: a systematic review](https://doi.org/10.1186/s12913-016-1650-9) | Jayakody A, Bryant J, Carey M, Hobden B, Dodd N, Sanson-Fisher R. | 2016 | BMC health services research |
+| 3 | ייעוץ רוקח ושיחות מעקב טלפוני לאחר שחרור במטופלים הנוטלים נוגדי קרישה: אשפוזים חוזרים ודימומים | [Impact of pharmacist-conducted anticoagulation patient education and telephone follow-up on transitions of care: a randomized controlled trial](https://doi.org/10.1186/s12913-021-06156-2) | Karaoui LR, Ramia E, Mansour H, Haddad N, Chamoun N. | 2021 | BMC health services research |
 
 ## 1. התערבויות במעבר מבית החולים לקהילה בקשישים, כולל מעקב טלפוני, והשפעתן על אשפוזים חוזרים
 
-**שם המאמר:** Successful care transitions for older people: a systematic review and meta-analysis of the effects of interventions that support medication continuity  
+**שם המאמר:** [Successful care transitions for older people: a systematic review and meta-analysis of the effects of interventions that support medication continuity](https://doi.org/10.1093/ageing/afaa002)  
 **מחברים:** Tomlinson J, Cheong VL, Fylan B, Silcock J, Smith H, Karban K, Blenkinsopp A.  
 **מקור:** Age and ageing  
 **סוג המחקר:** סקירה שיטתית ומטה-אנליזה של ניסויים אקראיים מבוקרים: 24 מחקרים, 17,664 משתתפים; 19 מחקרים נכללו במטה-אנליזה של אשפוזים חוזרים, לפי תקופת המעקב הארוכה ביותר שדווחה  
@@ -56,7 +56,7 @@
 
 ## 2. מעקב טלפוני (לבד או עם רכיבים נוספים) ואשפוז חוזר תוך 30 יום בחולים כרוניים
 
-**שם המאמר:** Effectiveness of interventions utilising telephone follow up in reducing hospital readmission within 30 days for individuals with chronic disease: a systematic review  
+**שם המאמר:** [Effectiveness of interventions utilising telephone follow up in reducing hospital readmission within 30 days for individuals with chronic disease: a systematic review](https://doi.org/10.1186/s12913-016-1650-9)  
 **מחברים:** Jayakody A, Bryant J, Carey M, Hobden B, Dodd N, Sanson-Fisher R.  
 **מקור:** BMC health services research  
 **סוג המחקר:** סקירה שיטתית ללא מטה-אנליזה: 10 מחקרים שעמדו בקריטריונים של EPOC; חולים עם מחלות לב וכלי דם, מחלות נשימה כרוניות וסוכרת; תוצא: אשפוז חוזר תוך 30 יום  
@@ -92,7 +92,7 @@
 
 ## 3. ייעוץ רוקח ושיחות מעקב טלפוני לאחר שחרור במטופלים הנוטלים נוגדי קרישה: אשפוזים חוזרים ודימומים
 
-**שם המאמר:** Impact of pharmacist-conducted anticoagulation patient education and telephone follow-up on transitions of care: a randomized controlled trial  
+**שם המאמר:** [Impact of pharmacist-conducted anticoagulation patient education and telephone follow-up on transitions of care: a randomized controlled trial](https://doi.org/10.1186/s12913-021-06156-2)  
 **מחברים:** Karaoui LR, Ramia E, Mansour H, Haddad N, Chamoun N.  
 **מקור:** BMC health services research  
 **סוג המחקר:** ניסוי אקראי פתוח (לא מוסווה) במרכז יחיד בלבנון; 200 מטופלים (100 בכל זרוע), גיל ממוצע 73.9; שיחות מעקב ביום 3 וביום 30; מעקב של 30 יום  
