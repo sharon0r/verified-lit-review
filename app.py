@@ -3,9 +3,7 @@
 
 Configuration (environment variables, or Streamlit secrets when deployed to the cloud):
   ANTHROPIC_API_KEY   required
-  APP_PASSWORD        optional; the owner's code (only the daily limit applies)
-  ACCESS_CODES        optional; personal codes for visitors with a run limit each,
-                      e.g. "sheba-7k2q:5, ichilov-9x4m:3". Every run is logged with its code.
+  APP_PASSWORD        optional; when set, visitors must enter it before running anything
   DAILY_RUN_LIMIT     optional; reviews allowed per 24 hours (default 10) - protects the API budget
   MAX_PAPERS          optional; upper limit for papers per review (default 3)
 """
@@ -22,7 +20,7 @@ from verified_lit_review import service  # noqa: E402
 
 # Streamlit Cloud keeps secrets in st.secrets; copy them to the environment the agent reads.
 try:
-    for _k in ("ANTHROPIC_API_KEY", "APP_PASSWORD", "ACCESS_CODES", "DAILY_RUN_LIMIT", "MAX_PAPERS"):
+    for _k in ("ANTHROPIC_API_KEY", "APP_PASSWORD", "DAILY_RUN_LIMIT", "MAX_PAPERS"):
         if _k in st.secrets and not os.environ.get(_k):
             os.environ[_k] = str(st.secrets[_k])
 except Exception:  # no secrets file when running locally - environment variables are used instead
@@ -74,32 +72,16 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
     st.error("לא הוגדר ANTHROPIC_API_KEY (משתנה סביבה, או Secrets בענן).")
     st.stop()
 
-owner_password = os.environ.get("APP_PASSWORD")
-codes = service.parse_access_codes(os.environ.get("ACCESS_CODES"))
-if (owner_password or codes) and "access" not in st.session_state:
-    entered = st.text_input("קוד גישה", type="password").strip()
-    match = None
-    if entered and owner_password and hmac.compare_digest(entered, owner_password):
-        match = ("owner", None)                       # the owner: only the daily limit applies
-    for code, limit in codes.items():
-        if entered and hmac.compare_digest(entered, code):
-            match = (code, limit)
-    if match:
-        st.session_state.access = match
+password = os.environ.get("APP_PASSWORD")
+if password and not st.session_state.get("authorized"):
+    entered = st.text_input("סיסמת גישה להרצה", type="password")
+    if entered and hmac.compare_digest(entered, password):
+        st.session_state.authorized = True
         st.rerun()
     if entered:
-        st.error("קוד שגוי")
-    st.info("ההרצה משתמשת במפתח API בתשלום, ולכן היא מוגבלת לבעלי קוד גישה אישי. "
-            "אפשר לעיין בדוגמה ובקוד בגיטהאב.")
+        st.error("סיסמה שגויה")
+    st.info("ההרצה משתמשת במפתח API בתשלום, ולכן היא מוגנת בסיסמה. אפשר לעיין בדוגמה ובקוד בגיטהאב.")
     st.stop()
-access_code, code_limit = st.session_state.get("access", (None, None))
-
-if code_limit is not None:
-    used_by_code = service.runs_by_code(access_code)
-    st.caption(f"ריצות שנותרו לקוד שלך: {max(code_limit - used_by_code, 0)}/{code_limit}")
-    if used_by_code >= code_limit:
-        st.warning("ניצלת את כל הריצות של קוד הגישה. אפשר לבקש קוד נוסף.")
-        st.stop()
 
 used = service.runs_since(time.time() - 86400)
 st.caption(f"ריצות ב-24 השעות האחרונות: {used}/{DAILY_RUN_LIMIT}")
@@ -112,8 +94,7 @@ if st.button("▶️ הרץ סקירה", type="primary"):
         def on_event(kind, msg):
             st.write(f"{ICONS.get(kind, '•')} {msg}")
         try:
-            st.session_state.result = service.run_review(question, n_papers, language, model=model,
-                                                         on_event=on_event, access_code=access_code)
+            st.session_state.result = service.run_review(question, n_papers, language, model=model, on_event=on_event)
             status.update(label="הסקירה הושלמה", state="complete", expanded=False)
         except Exception as e:  # shown to the user instead of a stack trace
             status.update(label="הריצה נכשלה", state="error")
