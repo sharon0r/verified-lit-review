@@ -47,7 +47,33 @@ no explicit certainty for long-term outcomes; no absolute difference per 100 pat
 a deliberate trade-off: the tool does not compute new numbers, so that every number can be checked
 against the paper.
 
-## 3. Limitations of this evaluation
+## 3. Which model: cost against quality
+
+Same question (cardiac rehab in heart failure), same prompt and guardrails, same AI physician reviewer.
+
+| Model | Papers | Cost per run | Quotes verified | Score | Rely on it as a first look? |
+|---|---|---|---|---|---|
+| Claude Opus 5.5 | 5 | ~$0.6 | 6 / 6 | 9 / 10 | yes |
+| Claude Opus 5.5 | 4 | $0.43 | 5 / 5 | 7 / 10 | yes, with caution |
+| Claude Haiku 5.5 | 7 | $0.03 | 11 / 11 | 6 / 10 | yes, with caution |
+| Claude Sonnet 5.5 | 5 | $0.32 | 5 / 5 | 5 / 10 | no |
+
+**What this shows.** The guardrails held for every model: no invented quote reached a report. What
+the cheaper models lost was *judgement*: choosing the papers (the newest Cochrane review missing or
+an outdated version used, overlapping reviews counted as independent, indirect cohorts) and weighing
+them. The two Opus runs also differ (9 vs 7), so the choice of papers varies from run to run, and a
+single run is a weak measurement. **Decision:** the app uses Opus only.
+
+**A guardrail gap found and fixed.** The Sonnet reviewer noticed two numbers in the conclusion that came
+from an abstract the agent never read, yet they were marked as checked: the check compared conclusion
+numbers with the pooled text of all papers, where they appeared by chance. Now every number in the
+conclusion must appear in a verified finding or quote, which are themselves checked against their own
+paper (`agent._conclusion_check`, test `test_conclusion_number_must_come_from_a_finding...`).
+
+**Prompt change from these reviews (not yet re-measured):** use the newest version of a review (e.g.
+Cochrane pub6 over pub5), and include at least one primary study when choosing more than two papers.
+
+## 4. Limitations of this evaluation
 
 - **AI reviewers, not people.** A Claude agent judged reports written by a Claude agent; the same model
   family may share blind spots. A review by a human clinician is the next step.

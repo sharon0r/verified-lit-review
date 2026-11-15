@@ -52,11 +52,12 @@ LABELS = {
                why="למה נבחר", database="נמצא במאגר", route="הורד דרך",
                numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא נמצאו במאמר",
                no_numbers="אין מספרים לבדיקה",
+               conclusion_numbers="מספרים במסקנה שנבדקו מול הממצאים המאומתים", not_traced="לא מופיעים בממצאים",
                findings="עיקרי הממצאים", relevance="רלוונטיות והסתייגויות", quotes="ציטוטים מתוך המאמר",
                pdf_page="עמוד PDF", journal_page="עמוד {} בכתב העת", ok="✅ אומת",
                note=("> **מה מאומת:** כל **ציטוט** נבדק אוטומטית, מילה במילה, מול טקסט עמוד ה-PDF שאליו הוא משויך, "
-                     "וציטוטים שלא אומתו הוסרו. **המספרים** בממצאים ובמסקנה נבדקים מול המספרים שבמאמר, "
-                     "ומספר שלא נמצא מסומן ⚠️. **הניסוח והפרשנות** הם סיכום שכתב מודל AI ואינם נבדקים אוטומטית. "
+                     "וציטוטים שלא אומתו הוסרו. **המספרים** בממצאים נבדקים מול המספרים שבמאמר, ומספר במסקנה "
+                     "חייב להופיע בממצא או בציטוט מאומת. מספר שלא עבר בדיקה מסומן ⚠️. **הניסוח והפרשנות** הם סיכום שכתב מודל AI ואינם נבדקים אוטומטית. "
                      "יש לבדוק אותם מול המקור לפני כל שימוש מקצועי."),
                conclusion="מסקנה: מה הספרות אומרת על השאלה",
                certainty="ודאות הראיות (בסגנון GRADE, הערכה משוערת)",
@@ -69,12 +70,14 @@ LABELS = {
                why="Why chosen", database="Found in", route="downloaded via",
                numbers="Numbers checked against the paper", found="found", not_found="not found in the paper",
                no_numbers="no numbers to check",
+               conclusion_numbers="Numbers in the conclusion checked against the verified findings",
+               not_traced="not in the findings",
                findings="Key findings", relevance="Relevance and caveats", quotes="Quotes from the article",
                pdf_page="PDF page", journal_page="journal p. {}", ok="✅ verified",
                note=("> **What is verified:** every **quote** was automatically checked, word for word, against the "
                      "text of the PDF page it is attributed to; unverified quotes were removed. **Numbers** in the "
-                     "findings and the conclusion are checked against the numbers printed in the paper; a number that "
-                     "is not found is marked ⚠️. **Wording and interpretation** are an AI-written summary and are not "
+                     "findings are checked against the numbers printed in the paper, and every number in the conclusion "
+                     "must appear in a verified finding or quote; a number that fails is marked ⚠️. **Wording and interpretation** are an AI-written summary and are not "
                      "machine-checked; verify them against the source before professional use."),
                conclusion="Conclusion: what the literature says",
                certainty="Certainty of evidence (GRADE-style, approximate)",
@@ -105,13 +108,13 @@ def norm(text):
     return re.sub(r"[^\w<>≤≥=±%" + DECIMAL + MINUS + r"]|_", "", t)
 
 
-def number_line(L, result):
+def number_line(L, result, label="numbers", missing="not_found"):
     """'Numbers checked against the paper: 7/8 found · ⚠️ not found: 0.72' (or 'none to check')."""
     ok, bad = result.get("verified", []), result.get("unverified", [])
     if not ok and not bad:
-        return f"_{L['numbers']}: {L['no_numbers']}_"
-    line = f"_{L['numbers']}: {len(ok)}/{len(ok) + len(bad)} {L['found']}_"
-    return line + (f" · ⚠️ **{L['not_found']}:** {', '.join(bad)}" if bad else " ✅")
+        return f"_{L[label]}: {L['no_numbers']}_"
+    line = f"_{L[label]}: {len(ok)}/{len(ok) + len(bad)} {L['found']}_"
+    return line + (f" · ⚠️ **{L[missing]}:** {', '.join(bad)}" if bad else " ✅")
 
 
 def md_cell(text):
@@ -135,7 +138,7 @@ def build_report(spec, pdf_dir, out):
     if spec.get("conclusion"):                           # the answer first, the evidence after
         md += [f"## {L['conclusion']}", "", spec["conclusion"], ""]
         if spec.get("conclusion_numbers") is not None:
-            md += [number_line(L, spec["conclusion_numbers"]), ""]
+            md += [number_line(L, spec["conclusion_numbers"], "conclusion_numbers", "not_traced"), ""]
     if spec.get("certainty"):
         md += [f"**{L['certainty']}:** {spec['certainty']}", ""]
     md += [f"## {L['table']}", "",

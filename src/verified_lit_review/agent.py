@@ -158,11 +158,14 @@ class Agent:
         return numbers.check(text, self._numbers(article["paper_id"]))
 
     def _conclusion_check(self, articles, conclusion):
-        union = numbers.PaperNumbers([])
+        """Numbers in the conclusion must come from the verified evidence of a paper: a finding whose
+        number was found in that paper, or a verified quote. Checking against the pooled text of all
+        papers let a number pass because it happened to appear somewhere else in some paper."""
+        traced = []
         for a in articles:
-            union.exact |= self._numbers(a["paper_id"]).exact
-        union.floats = [float(s) for s in union.exact]
-        return numbers.check(conclusion, union)
+            traced += self._number_check(a)[0]
+            traced += [q["text"] for q in a["quotes"] if self._check(a["paper_id"], int(q["page"]), q["text"])[0]]
+        return numbers.check(conclusion, numbers.PaperNumbers([" ".join(traced)]))
 
     def verify_quote(self, paper_id, page, text):
         ok, found, reason = self._check(paper_id, int(page), text)
@@ -201,7 +204,8 @@ class Agent:
             return {"accepted": False, "failures": failures, "number_warnings": number_warnings,
                     "instruction": "Fix or remove these quotes (copy exactly from retrieved pages). For numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
-                                   "never compute new numbers. Then submit again."}
+                                   "never compute new numbers. A number in the conclusion must also appear in "
+                                   "a finding or quote of the paper it comes from. Then submit again."}
         self.done = True
         return {"accepted": True, "note": "unverified quotes, if any, will be left out of the report"}
 

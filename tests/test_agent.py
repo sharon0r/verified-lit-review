@@ -190,6 +190,22 @@ def test_quotes_bounced_during_the_run_are_kept_in_the_audit_trail(setup):
     assert "returned to the agent at submission 1" in rows[1]["reason"]
 
 
+def test_conclusion_number_must_come_from_a_finding_not_just_anywhere_in_a_paper(setup):
+    store, pid, tmp = setup
+    art = {**article(pid, [{"page": 1, "text": GOOD}]), "study_type": "RCT"}
+    # 18.2 is in a finding; 240 is printed in the paper (page 2) but no finding or quote carries it
+    conclusion = "Readmission fell to 18.2% in one trial; another review pooled 240 trials."
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)),
+                         reply(tool_call("submit_report", articles=[art], conclusion=conclusion)),
+                         reply(tool_call("submit_report", articles=[art], conclusion=conclusion))])
+    r = Agent(store, str(tmp), client=client).run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
+    assert "240" in client.requests[2]["messages"][-1]["content"][0]["content"]   # returned to the agent
+    report = (tmp / "r.md").read_text(encoding="utf-8")
+    assert "checked against the verified findings: 1/2 found" in report
+    assert "⚠️ **not in the findings:** 240" in report
+    assert r["verified"] == 1
+
+
 def test_invented_number_is_sent_back_and_flagged_if_kept(setup):
     store, pid, tmp = setup
     bad = {**article(pid, [{"page": 1, "text": GOOD}]), "bullets": ["Readmission fell from 18.2% to 9.9%."]}

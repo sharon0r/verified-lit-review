@@ -45,8 +45,9 @@ AUTHOR = ("נבנה על ידי **שרון וייסברג (Sharon Weissberg)** �
           "[LinkedIn](https://www.linkedin.com/in/sharon-weissberg-82596911) · "
           "[GitHub](https://github.com/sharon0r/verified-lit-review) · "
           "[sharonor.we@gmail.com](mailto:sharonor.we@gmail.com)")
-MODELS = {"Claude Opus 5.5 (המדויק ביותר)": "claude-opus-5-5", "Claude Sonnet 5.5": "claude-sonnet-5-5",
-          "Claude Haiku 5.5 (הזול ביותר)": "claude-haiku-5-5"}
+# One model only: in a review by an AI physician agent, Opus scored 7-9/10 on the same question,
+# Haiku 6 and Sonnet 5 (see EVALUATION.md), so visitors are not offered the cheaper models.
+MODEL = "claude-opus-5-5"
 ICONS = {"search": "🔍", "fetch": "⬇️", "retrieve": "📄", "verify": "✅"}
 
 st.set_page_config(page_title="סקירת ספרות מאומתת", page_icon="📚", layout="wide")
@@ -61,7 +62,6 @@ with st.sidebar:
     st.header("הגדרות")
     n_papers = st.slider("מספר מאמרים", 1, MAX_PAPERS, MAX_PAPERS)
     language = st.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get, horizontal=True)
-    model = MODELS[st.selectbox("מודל (אפשר להשאיר כברירת מחדל)", list(MODELS))]
     if st.session_state.get("authorized"):  # other people's questions are never shown to visitors
         st.divider()
         st.subheader("ריצות קודמות")
@@ -145,7 +145,7 @@ if can_run and st.button("▶️ התחילו סקירה", type="primary"):
         def on_event(kind, msg):
             st.write(f"{ICONS.get(kind, '•')} {msg}")
         try:
-            st.session_state.result = service.run_review(question, n_papers, language, model=model, on_event=on_event)
+            st.session_state.result = service.run_review(question, n_papers, language, model=MODEL, on_event=on_event)
             status.update(label="הסקירה הושלמה", state="complete", expanded=False)
         except (ValueError, RuntimeError) as e:          # our own, user-readable messages
             status.update(label="הריצה נכשלה", state="error")
