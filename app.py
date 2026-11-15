@@ -6,7 +6,7 @@ Configuration (environment variables, or Streamlit secrets when deployed to the 
   APP_PASSWORD        optional; when set, visitors must enter it before running anything
   DAILY_RUN_LIMIT     optional; reviews allowed per 24 hours (default 10) - protects the API budget
   RUNS_PER_VISITOR    optional; runs per browser session when there is no password (default 1)
-  MAX_PAPERS          optional; upper limit for papers per review (default 3)
+  MAX_PAPERS          optional; upper limit for papers per review (default 5)
 """
 import hmac
 import os
@@ -27,7 +27,7 @@ try:
 except Exception:  # no secrets file when running locally - environment variables are used instead
     pass
 DAILY_RUN_LIMIT = int(os.environ.get("DAILY_RUN_LIMIT", "10"))
-MAX_PAPERS = int(os.environ.get("MAX_PAPERS", "3"))
+MAX_PAPERS = int(os.environ.get("MAX_PAPERS", "5"))
 MAX_LOGIN_ATTEMPTS = 5
 RUNS_PER_VISITOR = int(os.environ.get("RUNS_PER_VISITOR", "1"))
 _ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -59,7 +59,7 @@ st.markdown("""<style>
 # ------------------------------------------------------------------ sidebar
 with st.sidebar:
     st.header("הגדרות")
-    n_papers = st.slider("מספר מאמרים", 1, MAX_PAPERS, min(3, MAX_PAPERS))
+    n_papers = st.slider("מספר מאמרים", 1, MAX_PAPERS, MAX_PAPERS)
     language = st.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get, horizontal=True)
     model = MODELS[st.selectbox("מודל (אפשר להשאיר כברירת מחדל)", list(MODELS))]
     if st.session_state.get("authorized"):  # other people's questions are never shown to visitors
@@ -73,7 +73,7 @@ with st.sidebar:
 # ------------------------------------------------------------------ main
 st.title("📚 סקירת ספרות עם ציטוטים מאומתים")
 st.markdown(AUTHOR)
-st.markdown("כתבו שאלת מחקר בכל תחום, ותקבלו תוך כדקה סיכום של 1 עד 3 מאמרים אקדמיים שעברו שיפוט עמיתים "
+st.markdown("כתבו שאלת מחקר בכל תחום, ותקבלו תוך דקה-שתיים סיכום של עד 5 מאמרים אקדמיים שעברו שיפוט עמיתים "
             "וזמינים לקריאה חופשית. **כל ציטוט בדו\"ח נבדק אוטומטית, מילה במילה, מול העמוד המקורי ב-PDF**, "
             "וציטוט שלא נמצא נמחק.")
 

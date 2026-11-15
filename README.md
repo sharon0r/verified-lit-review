@@ -74,7 +74,7 @@ uvicorn verified_lit_review.api:app --app-dir src                               
 
 (On Windows PowerShell use `$env:ANTHROPIC_API_KEY = "..."`; for the CLI and API set `PYTHONPATH=src` or `pip install -e .`.)
 
-**Cloud (Streamlit Community Cloud).** Deploy `app.py` from this repo and paste the keys from [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example) into the app's *Secrets*. The key never enters the repository. Because every run is paid for with the owner's API key, the hosted app gives each visitor one trial run (`RUNS_PER_VISITOR`, or an `APP_PASSWORD` instead), shows saved example reports for free, and enforces a `DAILY_RUN_LIMIT` (default 10 per 24 h; the public demo uses 5) and `MAX_PAPERS` (default 3), on top of a monthly spend limit set in the Anthropic console.
+**Cloud (Streamlit Community Cloud).** Deploy `app.py` from this repo and paste the keys from [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example) into the app's *Secrets*. The key never enters the repository. Because every run is paid for with the owner's API key, the hosted app gives each visitor one trial run (`RUNS_PER_VISITOR`, or an `APP_PASSWORD` instead), shows saved example reports for free, and enforces a `DAILY_RUN_LIMIT` (default 10 per 24 h; the public demo uses 5) and `MAX_PAPERS` (default 5), on top of a monthly spend limit set in the Anthropic console.
 
 REST API:
 
