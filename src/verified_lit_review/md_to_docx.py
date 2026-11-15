@@ -16,7 +16,10 @@ sys.stdout.reconfigure(encoding="utf-8")
 SRC, OUT = sys.argv[1], sys.argv[2]
 HEB = re.compile(r"[֐-׿]")
 LATIN_FONT, HEB_FONT = "Times New Roman", "David"
-INLINE = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*|\[([^\]]+)\]\(([^)]+)\)")
+# link text may contain escaped brackets ("\[CARE\]"); a URL may contain one level of balanced
+# parentheses, as Elsevier DOIs do ("10.1016/S0140-6736(20)30183-5")
+INLINE = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*|\[((?:\\.|[^\]\\])+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)")
+UNESCAPE = re.compile(r"\\([\\\[\]|])")
 
 doc = Document()
 sec = doc.sections[0]
@@ -122,7 +125,7 @@ def add_inline(p, text, bold=False, italic=False):
         elif m.group(2) is not None:
             add_inline(p, m.group(2), bold, True)
         else:
-            add_link(p, m.group(3), m.group(4))
+            add_link(p, UNESCAPE.sub(r"\1", m.group(3)), m.group(4))
         pos = m.end()
     if pos < len(text):
         seg = text[pos:]
@@ -198,7 +201,8 @@ while i < len(lines):
     if ln.startswith("|"):
         rows = []
         while i < len(lines) and lines[i].startswith("|"):
-            cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+            cells = [c.strip().replace("\\|", "|")       # "\|" is a literal pipe inside a cell
+                     for c in re.split(r"(?<!\\)\|", lines[i].strip().removeprefix("|").removesuffix("|"))]
             if not all(re.fullmatch(r":?-{3,}:?", c) for c in cells):
                 rows.append(cells)
             i += 1

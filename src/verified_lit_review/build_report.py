@@ -127,7 +127,8 @@ def paper_url(a):
 
 
 def linked_title(a):
-    title = a["title"].replace("[", "\\[").replace("]", "\\]")
+    title = " ".join(str(a["title"]).split())              # no line breaks inside a link
+    title = title.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
     url = paper_url(a)
     return f"[{title}]({url})" if url else title
 
