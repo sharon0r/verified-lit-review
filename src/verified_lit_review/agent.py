@@ -68,7 +68,12 @@ TOOLS = [
                               "text": {"type": "string"}})},
     {"name": "submit_report", "strict": True,
      "description": "Submit the final review. Every quote is verified; failures are returned to you.",
-     "input_schema": _schema({"articles": {"type": "array", "items": ARTICLE}})},
+     "input_schema": _schema({
+         "conclusion": {"type": "string",
+                        "description": "3-5 sentences answering the research question across all papers: "
+                                       "the overall direction, how strong and consistent the evidence is, "
+                                       "and the main gaps"},
+         "articles": {"type": "array", "items": ARTICLE}})},
 ]
 
 
@@ -132,7 +137,8 @@ class Agent:
         ok, found, reason = self._check(paper_id, int(page), text)
         return {"verified": ok, "found_on_pages": found, "reason": reason}
 
-    def submit_report(self, articles):
+    def submit_report(self, articles, conclusion=""):
+        self.conclusion = conclusion
         if not articles:
             return {"error": "submit at least one paper; if none can answer the question, say so in a "
                              "paper's relevance field instead of submitting nothing"}
@@ -224,7 +230,8 @@ class Agent:
                 self.store.log_quote(run_id, a["paper_id"], int(q["page"]), q["text"], ok, found, reason)
         if not arts:
             raise RuntimeError("none of the submitted papers could be downloaded and read")
-        spec = {"question": question, "language": language, "articles": arts}
+        spec = {"question": question, "language": language, "articles": arts,
+                "conclusion": getattr(self, "conclusion", "")}
         ok_n, rejected = build_report(spec, "", out_path)          # independent re-check on the PDFs
         cost = self.cost()
         self.store.finish_run(run_id, out_path, cost_usd=cost, served_model=self._served())

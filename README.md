@@ -47,20 +47,19 @@ flowchart LR
 Question: *Does telephone follow-up after hospital discharge reduce readmissions?* ([full log](examples/telephone-follow-up/run_log.txt) · [report, Hebrew](examples/telephone-follow-up/Research_Summary_Report.md))
 
 ```text
-🔍 'telephone follow-up after hospital discharge readmission randomized trial': 10 papers (network)
-🔍 'post-discharge telephone calls readmission systematic review meta-analysis': 0 papers (network)
-🔍 'telephone follow-up discharge readmission meta-analysis': 2 papers (network)
-⬇  10.2196/80529: cached, 14 pages
-⬇  10.1093/ageing/afaa002: ok, 12 pages
-⬇  10.1007/s12603-016-0745-7: ok, 8 pages
-📄 10.2196/80529: pages [7, 13, 6] for 'results readmission ED visits 30 days intervention vs control odds ratio'
-✅ submission 1: 6/6 quotes verified
-💲 52,344 input + 3,869 output tokens ≈ $0.29 · 55 s
+🔍 [europepmc] 'telephone follow-up after hospital discharge readmission randomized trial': 10 papers
+🔍 [europepmc] 'post-discharge telephone calls readmission systematic review meta-analysis': 0 papers
+🔍 [europepmc] 'telephone follow-up discharge readmission systematic review': 3 papers
+⬇  10.1186/s12913-016-1650-9: ok, 9 pages
+📄 10.1093/ageing/afaa002: pages [1, 3] for 'meta-analysis stratified by component telephone follow-up RR ...'
+📄 10.2196/80529: pages [3, 9] for 'limitations quasi-randomized allocation design'
+✅ submission 1: 7/7 quotes verified
+💲 ≈ $0.28 · 74 s
 ```
 
-The agent reported honestly that the largest trial (n = 7,091) found **no** significant reduction in readmissions, only in emergency-department visits, and balanced it with a meta-analysis and a randomized trial.
+The report opens with a conclusion that does not overstate: a stand-alone call has **not** been shown to reduce readmissions; benefit appears when the call is part of a broader transition bundle. The largest trial (n = 7,091) reduced emergency visits but not readmissions, and the agent reports the authors' NNT instead of computing its own.
 
-A second run, on an education question (*Does formative assessment with feedback improve student achievement?*): the agent chose OpenAlex on its own, fetched three papers (two meta-analyses and a controlled study) and verified 6/6 quotes for $0.31 ([report](examples/formative-assessment/Research_Summary_Report.md)).
+A second run, on an education question (*Does formative assessment with feedback improve student achievement?*): the agent chose OpenAlex on its own and verified 6/6 quotes for $0.22 ([report](examples/formative-assessment/Research_Summary_Report.md)).
 
 ## Run it
 
@@ -75,7 +74,7 @@ uvicorn verified_lit_review.api:app --app-dir src                               
 
 (On Windows PowerShell use `$env:ANTHROPIC_API_KEY = "..."`; for the CLI and API set `PYTHONPATH=src` or `pip install -e .`.)
 
-**Cloud (Streamlit Community Cloud).** Deploy `app.py` from this repo and paste the keys from [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example) into the app's *Secrets*. The key never enters the repository. Because every run is paid for with the owner's API key, the hosted app is protected by `APP_PASSWORD`, a `DAILY_RUN_LIMIT` (default 10 per 24 h) and `MAX_PAPERS` (default 3), on top of a monthly spend limit set in the Anthropic console.
+**Cloud (Streamlit Community Cloud).** Deploy `app.py` from this repo and paste the keys from [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example) into the app's *Secrets*. The key never enters the repository. Because every run is paid for with the owner's API key, the hosted app gives each visitor one trial run (`RUNS_PER_VISITOR`, or an `APP_PASSWORD` instead), shows saved example reports for free, and enforces a `DAILY_RUN_LIMIT` (default 10 per 24 h; the public demo uses 5) and `MAX_PAPERS` (default 3), on top of a monthly spend limit set in the Anthropic console.
 
 REST API:
 
@@ -138,6 +137,10 @@ No API key or network is needed: PDFs are generated on the fly, HTTP is faked, a
 ## How it was built
 
 Designed and built with [Claude Code](https://claude.com/claude-code) as an AI pair programmer. The requirements, the guardrail design, the choice of sources and the review of every output were mine.
+
+## Contact
+
+**Sharon Weissberg** · [LinkedIn](https://www.linkedin.com/in/sharon-weissberg-82596911) · [sharonor.we@gmail.com](mailto:sharonor.we@gmail.com)
 
 ## License
 

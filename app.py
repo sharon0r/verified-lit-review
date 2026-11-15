@@ -36,11 +36,15 @@ DEMOS = {"בריאות: מעקב טלפוני אחרי שחרור": os.path.join
          "חינוך: הערכה מעצבת ומשוב": os.path.join(_ROOT, "examples", "formative-assessment",
                                                     "Research_Summary_Report.md")}
 
-EXAMPLES = [
-    "Does telephone follow-up after hospital discharge reduce readmissions?",
-    "Does formative assessment with feedback improve student achievement?",
-    "Does remote work affect employee productivity?",
-]
+EXAMPLES = {  # short Hebrew label -> the question sent to the agent
+    "🏥 מעקב טלפוני אחרי שחרור": "Does telephone follow-up after hospital discharge reduce readmissions?",
+    "🎓 משוב לתלמידים": "Does formative assessment with feedback improve student achievement?",
+    "💼 עבודה מרחוק": "Does remote work affect employee productivity?",
+}
+AUTHOR = ("נבנה על ידי **שרון וייסברג (Sharon Weissberg)** · "
+          "[LinkedIn](https://www.linkedin.com/in/sharon-weissberg-82596911) · "
+          "[GitHub](https://github.com/sharon0r/verified-lit-review) · "
+          "[sharonor.we@gmail.com](mailto:sharonor.we@gmail.com)")
 MODELS = {"Claude Opus 5.5 (המדויק ביותר)": "claude-opus-5-5", "Claude Sonnet 5.5": "claude-sonnet-5-5",
           "Claude Haiku 5.5 (הזול ביותר)": "claude-haiku-5-5"}
 ICONS = {"search": "🔍", "fetch": "⬇️", "retrieve": "📄", "verify": "✅"}
@@ -57,37 +61,46 @@ with st.sidebar:
     st.header("הגדרות")
     n_papers = st.slider("מספר מאמרים", 1, MAX_PAPERS, min(3, MAX_PAPERS))
     language = st.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get, horizontal=True)
-    model = MODELS[st.selectbox("מודל", list(MODELS))]
+    model = MODELS[st.selectbox("מודל (אפשר להשאיר כברירת מחדל)", list(MODELS))]
     if st.session_state.get("authorized"):  # other people's questions are never shown to visitors
         st.divider()
         st.subheader("ריצות קודמות")
         for r in service.list_runs(8):
             st.caption(f"#{r['run_id']} · {r['verified']}/{r['quotes']} ✅ · {r['question'][:55]}")
+    st.divider()
+    st.markdown(AUTHOR)
 
 # ------------------------------------------------------------------ main
 st.title("📚 סקירת ספרות עם ציטוטים מאומתים")
-st.markdown("סוכן AI מחפש מאמרים בגישה פתוחה, קורא אותם וכותב סיכום. "
-            "**כל ציטוט נבדק בקוד מול העמוד המדויק ב-PDF**, וציטוט שלא נמצא נדחה.")
-
-with st.expander("📄 דוגמה מוכנה: דו\"ח אמיתי שהסוכן כבר הפיק (בלי עלות, בלי המתנה)"):
-    demo = st.radio("בחרי דוגמה", list(DEMOS), horizontal=True, label_visibility="collapsed")
-    try:
-        with open(DEMOS[demo], encoding="utf-8") as f:
-            st.markdown(f.read())
-    except OSError:
-        st.caption("הדוגמה לא נמצאה.")
+st.markdown(AUTHOR)
+st.markdown("כתבו שאלת מחקר בכל תחום, ותקבלו תוך כדקה סיכום של 1 עד 3 מאמרים אקדמיים שעברו שיפוט עמיתים "
+            "וזמינים לקריאה חופשית. **כל ציטוט בדו\"ח נבדק אוטומטית, מילה במילה, מול העמוד המקורי ב-PDF**, "
+            "וציטוט שלא נמצא נמחק.")
 
 if "question" not in st.session_state:
-    st.session_state.question = EXAMPLES[0]
+    st.session_state.question = next(iter(EXAMPLES.values()))
+st.caption("או בחרו שאלה לדוגמה:")
 cols = st.columns(len(EXAMPLES))
-for col, ex in zip(cols, EXAMPLES):
-    if col.button(ex[:48] + "…", use_container_width=True):
+for col, (label, ex) in zip(cols, EXAMPLES.items()):
+    if col.button(label, use_container_width=True):
         st.session_state.question = ex
 question = st.text_area("שאלת מחקר (באנגלית או בעברית)", key="question", height=80,
                         max_chars=service.MAX_QUESTION_CHARS)
 
+
+def show_demo():
+    with st.expander("📄 רוצים לראות קודם? דו\"ח אמיתי שהסוכן כבר הפיק (חינם, מיידי)"):
+        demo = st.radio("בחרו דוגמה", list(DEMOS), horizontal=True, label_visibility="collapsed")
+        try:
+            with open(DEMOS[demo], encoding="utf-8") as f:
+                st.markdown(f.read())
+        except OSError:
+            st.caption("הדוגמה לא נמצאה.")
+
+
 if not os.environ.get("ANTHROPIC_API_KEY"):
-    st.error("לא הוגדר ANTHROPIC_API_KEY (משתנה סביבה, או Secrets בענן).")
+    st.error("ההרצה החיה אינה זמינה כרגע. אפשר לעיין בדוגמה המוכנה.")
+    show_demo()
     st.stop()
 
 password = os.environ.get("APP_PASSWORD")
@@ -112,20 +125,21 @@ used = service.runs_since(time.time() - 86400)
 # the shared daily limit and the prepaid API balance cap the total either way.
 per_visitor = None if password else RUNS_PER_VISITOR
 my_runs = st.session_state.get("my_runs", 0)
-st.caption(f"ריצות ב-24 השעות האחרונות: {used}/{DAILY_RUN_LIMIT}"
-           + (f" · ריצות שנותרו לך: {max(per_visitor - my_runs, 0)}/{per_visitor}" if per_visitor else ""))
+left_today = max(DAILY_RUN_LIMIT - used, 0)
+st.caption((f"יש לכם ריצת ניסיון אחת · " if per_visitor == 1 and my_runs == 0 else "")
+           + f"היום נותרו באתר {left_today} ריצות מתוך {DAILY_RUN_LIMIT}")
 can_run = True
 if used >= DAILY_RUN_LIMIT:
-    st.warning("הגענו לתקרת הריצות היומית. אפשר לעיין בדוגמה המוכנה למעלה, או לנסות שוב מחר.")
+    st.warning("הריצות של היום נוצלו. אפשר לעיין בדוגמה המוכנה, או לנסות שוב מחר.")
     can_run = False
 elif per_visitor is not None and my_runs >= per_visitor:
-    st.info("ניצלת את ריצת הניסיון שלך. תודה! אפשר לעיין בדוגמה המוכנה ובקוד בגיטהאב.")
+    st.info("ריצת הניסיון שלכם נוצלה. תודה! אפשר לעיין בדוגמה המוכנה ובקוד בגיטהאב.")
     can_run = False
 
-if can_run and st.button("▶️ הרץ סקירה", type="primary"):
+if can_run and st.button("▶️ התחילו סקירה", type="primary"):
     st.session_state.my_runs = my_runs + 1
     if service.runs_since(time.time() - 86400) >= DAILY_RUN_LIMIT:   # re-check right before spending
-        st.warning("הגעת לתקרת הריצות היומית.")
+        st.warning("הריצות של היום נוצלו.")
         st.stop()
     with st.status("הסוכן עובד…", expanded=True) as status:
         def on_event(kind, msg):
@@ -138,7 +152,9 @@ if can_run and st.button("▶️ הרץ סקירה", type="primary"):
             st.error(str(e))
         except Exception:  # noqa: BLE001 - no internal details on a public page
             status.update(label="הריצה נכשלה", state="error")
-            st.error("אירעה שגיאה בלתי צפויה. נסי שוב בעוד דקה.")
+            st.error("אירעה שגיאה בלתי צפויה. נסו שוב בעוד דקה.")
+
+show_demo()
 
 r = st.session_state.get("result")
 if r:

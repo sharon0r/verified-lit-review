@@ -39,7 +39,9 @@ def main():
         where = f"actually on page(s) {q['found_on_pages']}" if q["found_on_pages"] else q.get("reason") or "not found"
         print(f"❌ REJECTED p.{q['claimed_page']} ({where}): {q['text'][:80]}...")
     u = r["usage"]
-    print(f"💲 {u['input_tokens']:,} input + {u['output_tokens']:,} output tokens ≈ ${r['cost_usd']} · {r['seconds']}s")
+    cached = u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+    print(f"💲 {u['input_tokens'] + cached:,} input ({u.get('cache_read_input_tokens', 0):,} from cache) + "
+          f"{u['output_tokens']:,} output tokens ≈ ${r['cost_usd']} · {r['seconds']}s")
 
 
 if __name__ == "__main__":

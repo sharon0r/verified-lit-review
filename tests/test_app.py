@@ -29,11 +29,11 @@ def test_password_gate_blocks_until_correct_password(env, monkeypatch):
     monkeypatch.setenv("APP_PASSWORD", "s3cret")
     at = AppTest.from_file(APP, default_timeout=30).run()
     assert not at.exception
-    assert "▶️ הרץ סקירה" not in labels(at)
+    assert "▶️ התחילו סקירה" not in labels(at)
     at.text_input[0].input("wrong").run()
-    assert "▶️ הרץ סקירה" not in labels(at) and at.error[0].value == "סיסמה שגויה"
+    assert "▶️ התחילו סקירה" not in labels(at) and at.error[0].value == "סיסמה שגויה"
     at.text_input[0].input("s3cret").run()
-    assert "▶️ הרץ סקירה" in labels(at)
+    assert "▶️ התחילו סקירה" in labels(at)
 
 
 def test_daily_limit_hides_run_button(env):
@@ -43,8 +43,8 @@ def test_daily_limit_hides_run_button(env):
     store.close()
     at = AppTest.from_file(APP, default_timeout=30).run()
     assert not at.exception
-    assert "▶️ הרץ סקירה" not in labels(at)
-    assert "תקרת הריצות" in at.warning[0].value
+    assert "▶️ התחילו סקירה" not in labels(at)
+    assert "נוצלו" in at.warning[0].value
 
 
 def test_runs_since_counts_only_recent_runs(env):
@@ -59,11 +59,11 @@ def test_runs_since_counts_only_recent_runs(env):
 
 def test_open_mode_allows_one_run_per_visitor(env):
     at = AppTest.from_file(APP, default_timeout=30).run()
-    assert "▶️ הרץ סקירה" in labels(at)                    # no password: open, first run allowed
+    assert "▶️ התחילו סקירה" in labels(at)                    # no password: open, first run allowed
     at.session_state["my_runs"] = 1
     at.run()
-    assert "▶️ הרץ סקירה" not in labels(at)
-    assert "ניצלת" in at.info[0].value
+    assert "▶️ התחילו סקירה" not in labels(at)
+    assert "נוצלה" in at.info[0].value
 
 
 def test_demo_report_is_shown_without_any_key(env, monkeypatch):

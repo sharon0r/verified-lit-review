@@ -51,16 +51,21 @@ LABELS = {
                authors="מחברים", source="מקור", type="סוג המחקר", file="קובץ",
                findings="עיקרי הממצאים", relevance="רלוונטיות והסתייגויות", quotes="ציטוטים מתוך המאמר",
                pdf_page="עמוד PDF", journal_page="עמוד {} בכתב העת", ok="✅ אומת",
-               note=("> **אימות ציטוטים:** כל ציטוט נבדק אוטומטית מול טקסט עמוד ה-PDF שאליו הוא משויך. "
-                     "ציטוטים שלא אומתו הוסרו מהדו\"ח."),
+               note=("> **מה מאומת:** כל **ציטוט** נבדק אוטומטית, מילה במילה, מול טקסט עמוד ה-PDF שאליו הוא משויך, "
+                     "וציטוטים שלא אומתו הוסרו. **הממצאים, המסקנה וההסתייגויות** הם סיכום שכתב מודל AI על בסיס המאמרים, "
+                     "ואינם נבדקים אוטומטית. יש לבדוק אותם מול המקור לפני כל שימוש מקצועי."),
+               conclusion="מסקנה: מה הספרות אומרת על השאלה",
                summary="**סיכום אימות:** {ok} ציטוטים אומתו ונכללו; {bad} נדחו והוסרו."),
     "en": dict(title="Literature Review Report", count="{} articles", question="Research question", table="Summary of articles",
                cols=["#", "Topic", "Title", "Authors", "Year", "Source"], article="Title",
                authors="Authors", source="Source", type="Study type", file="File",
                findings="Key findings", relevance="Relevance and caveats", quotes="Quotes from the article",
                pdf_page="PDF page", journal_page="journal p. {}", ok="✅ verified",
-               note=("> **Quote verification:** every quote was automatically checked against the text of "
-                     "the PDF page it is attributed to. Unverified quotes were removed."),
+               note=("> **What is verified:** every **quote** was automatically checked, word for word, against the "
+                     "text of the PDF page it is attributed to; unverified quotes were removed. **Findings, the "
+                     "conclusion and caveats** are an AI-written summary of the papers and are not machine-checked; "
+                     "verify them against the source before professional use."),
+               conclusion="Conclusion: what the literature says",
                summary="**Verification summary:** {ok} quotes verified and included; {bad} rejected and removed."),
 }
 
@@ -100,7 +105,10 @@ def build_report(spec, pdf_dir, out):
     md = [f"# {L['title']} ({L['count'].format(len(arts))})", ""]
     if spec.get("question"):
         md += [f"**{L['question']}:** {spec['question']}", ""]
-    md += [L["note"], "", f"## {L['table']}", "",
+    md += [L["note"], ""]
+    if spec.get("conclusion"):                           # the answer first, the evidence after
+        md += [f"## {L['conclusion']}", "", spec["conclusion"], ""]
+    md += [f"## {L['table']}", "",
            "| " + " | ".join(L["cols"]) + " |", "|" + "---|" * len(L["cols"])]
     for i, a in enumerate(arts, 1):
         md.append("| " + " | ".join(md_cell(x) for x in
