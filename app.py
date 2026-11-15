@@ -5,6 +5,7 @@ Configuration (environment variables, or Streamlit secrets when deployed to the 
   ANTHROPIC_API_KEY   required
   APP_PASSWORD        optional; when set, visitors must enter it before running anything
   DAILY_RUN_LIMIT     optional; reviews allowed per 24 hours (default 10) - protects the API budget
+  RUNS_PER_VISITOR    optional; runs per browser session when there is no password (default 1)
   MAX_PAPERS          optional; upper limit for papers per review (default 3)
 """
 import hmac
@@ -28,6 +29,12 @@ except Exception:  # no secrets file when running locally - environment variable
 DAILY_RUN_LIMIT = int(os.environ.get("DAILY_RUN_LIMIT", "10"))
 MAX_PAPERS = int(os.environ.get("MAX_PAPERS", "3"))
 MAX_LOGIN_ATTEMPTS = 5
+RUNS_PER_VISITOR = int(os.environ.get("RUNS_PER_VISITOR", "1"))
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+DEMOS = {"בריאות: מעקב טלפוני אחרי שחרור": os.path.join(_ROOT, "examples", "telephone-follow-up",
+                                                          "Research_Summary_Report.md"),
+         "חינוך: הערכה מעצבת ומשוב": os.path.join(_ROOT, "examples", "formative-assessment",
+                                                    "Research_Summary_Report.md")}
 
 EXAMPLES = [
     "Does telephone follow-up after hospital discharge reduce readmissions?",
@@ -51,7 +58,7 @@ with st.sidebar:
     n_papers = st.slider("מספר מאמרים", 1, MAX_PAPERS, min(3, MAX_PAPERS))
     language = st.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get, horizontal=True)
     model = MODELS[st.selectbox("מודל", list(MODELS))]
-    if not os.environ.get("APP_PASSWORD") or st.session_state.get("authorized"):  # never shown to visitors
+    if st.session_state.get("authorized"):  # other people's questions are never shown to visitors
         st.divider()
         st.subheader("ריצות קודמות")
         for r in service.list_runs(8):
@@ -61,6 +68,14 @@ with st.sidebar:
 st.title("📚 סקירת ספרות עם ציטוטים מאומתים")
 st.markdown("סוכן AI מחפש מאמרים בגישה פתוחה, קורא אותם וכותב סיכום. "
             "**כל ציטוט נבדק בקוד מול העמוד המדויק ב-PDF**, וציטוט שלא נמצא נדחה.")
+
+with st.expander("📄 דוגמה מוכנה: דו\"ח אמיתי שהסוכן כבר הפיק (בלי עלות, בלי המתנה)"):
+    demo = st.radio("בחרי דוגמה", list(DEMOS), horizontal=True, label_visibility="collapsed")
+    try:
+        with open(DEMOS[demo], encoding="utf-8") as f:
+            st.markdown(f.read())
+    except OSError:
+        st.caption("הדוגמה לא נמצאה.")
 
 if "question" not in st.session_state:
     st.session_state.question = EXAMPLES[0]
@@ -93,12 +108,22 @@ if password and not st.session_state.get("authorized"):
     st.stop()
 
 used = service.runs_since(time.time() - 86400)
-st.caption(f"ריצות ב-24 השעות האחרונות: {used}/{DAILY_RUN_LIMIT}")
+# Without a password the app is open, so every visitor gets RUNS_PER_VISITOR runs (default 1);
+# the shared daily limit and the prepaid API balance cap the total either way.
+per_visitor = None if password else RUNS_PER_VISITOR
+my_runs = st.session_state.get("my_runs", 0)
+st.caption(f"ריצות ב-24 השעות האחרונות: {used}/{DAILY_RUN_LIMIT}"
+           + (f" · ריצות שנותרו לך: {max(per_visitor - my_runs, 0)}/{per_visitor}" if per_visitor else ""))
+can_run = True
 if used >= DAILY_RUN_LIMIT:
-    st.warning("הגעת לתקרת הריצות היומית. נסי שוב מחר.")
-    st.stop()
+    st.warning("הגענו לתקרת הריצות היומית. אפשר לעיין בדוגמה המוכנה למעלה, או לנסות שוב מחר.")
+    can_run = False
+elif per_visitor is not None and my_runs >= per_visitor:
+    st.info("ניצלת את ריצת הניסיון שלך. תודה! אפשר לעיין בדוגמה המוכנה ובקוד בגיטהאב.")
+    can_run = False
 
-if st.button("▶️ הרץ סקירה", type="primary"):
+if can_run and st.button("▶️ הרץ סקירה", type="primary"):
+    st.session_state.my_runs = my_runs + 1
     if service.runs_since(time.time() - 86400) >= DAILY_RUN_LIMIT:   # re-check right before spending
         st.warning("הגעת לתקרת הריצות היומית.")
         st.stop()

@@ -55,3 +55,19 @@ def test_runs_since_counts_only_recent_runs(env):
     store.start_run("new")
     store.close()
     assert service.runs_since(time.time() - 86400) == 1
+
+
+def test_open_mode_allows_one_run_per_visitor(env):
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    assert "▶️ הרץ סקירה" in labels(at)                    # no password: open, first run allowed
+    at.session_state["my_runs"] = 1
+    at.run()
+    assert "▶️ הרץ סקירה" not in labels(at)
+    assert "ניצלת" in at.info[0].value
+
+
+def test_demo_report_is_shown_without_any_key(env, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    assert not at.exception
+    assert any("דו\"ח סיכום ספרות" in m.value for m in at.markdown)   # the saved example report
