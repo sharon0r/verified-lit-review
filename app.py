@@ -27,6 +27,7 @@ except Exception:  # no secrets file when running locally - environment variable
     pass
 DAILY_RUN_LIMIT = int(os.environ.get("DAILY_RUN_LIMIT", "10"))
 MAX_PAPERS = int(os.environ.get("MAX_PAPERS", "3"))
+MAX_LOGIN_ATTEMPTS = 5
 
 EXAMPLES = [
     "Does telephone follow-up after hospital discharge reduce readmissions?",
@@ -50,10 +51,11 @@ with st.sidebar:
     n_papers = st.slider("מספר מאמרים", 1, MAX_PAPERS, min(3, MAX_PAPERS))
     language = st.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get, horizontal=True)
     model = MODELS[st.selectbox("מודל", list(MODELS))]
-    st.divider()
-    st.subheader("ריצות קודמות")
-    for r in service.list_runs(8):
-        st.caption(f"#{r['run_id']} · {r['verified']}/{r['quotes']} ✅ · {r['question'][:55]}")
+    if not os.environ.get("APP_PASSWORD") or st.session_state.get("authorized"):  # never shown to visitors
+        st.divider()
+        st.subheader("ריצות קודמות")
+        for r in service.list_runs(8):
+            st.caption(f"#{r['run_id']} · {r['verified']}/{r['quotes']} ✅ · {r['question'][:55]}")
 
 # ------------------------------------------------------------------ main
 st.title("📚 סקירת ספרות עם ציטוטים מאומתים")
@@ -66,7 +68,8 @@ cols = st.columns(len(EXAMPLES))
 for col, ex in zip(cols, EXAMPLES):
     if col.button(ex[:48] + "…", use_container_width=True):
         st.session_state.question = ex
-question = st.text_area("שאלת מחקר (באנגלית או בעברית)", key="question", height=80)
+question = st.text_area("שאלת מחקר (באנגלית או בעברית)", key="question", height=80,
+                        max_chars=service.MAX_QUESTION_CHARS)
 
 if not os.environ.get("ANTHROPIC_API_KEY"):
     st.error("לא הוגדר ANTHROPIC_API_KEY (משתנה סביבה, או Secrets בענן).")
@@ -74,11 +77,17 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
 
 password = os.environ.get("APP_PASSWORD")
 if password and not st.session_state.get("authorized"):
+    failures = st.session_state.get("failed_logins", 0)
+    if failures >= MAX_LOGIN_ATTEMPTS:
+        st.error("יותר מדי ניסיונות שגויים. הגישה ננעלה.")
+        st.stop()
     entered = st.text_input("סיסמת גישה להרצה", type="password")
     if entered and hmac.compare_digest(entered, password):
         st.session_state.authorized = True
         st.rerun()
     if entered:
+        st.session_state.failed_logins = failures + 1
+        time.sleep(1.5)                          # slows down guessing
         st.error("סיסמה שגויה")
     st.info("ההרצה משתמשת במפתח API בתשלום, ולכן היא מוגנת בסיסמה. אפשר לעיין בדוגמה ובקוד בגיטהאב.")
     st.stop()
@@ -90,15 +99,21 @@ if used >= DAILY_RUN_LIMIT:
     st.stop()
 
 if st.button("▶️ הרץ סקירה", type="primary"):
+    if service.runs_since(time.time() - 86400) >= DAILY_RUN_LIMIT:   # re-check right before spending
+        st.warning("הגעת לתקרת הריצות היומית.")
+        st.stop()
     with st.status("הסוכן עובד…", expanded=True) as status:
         def on_event(kind, msg):
             st.write(f"{ICONS.get(kind, '•')} {msg}")
         try:
             st.session_state.result = service.run_review(question, n_papers, language, model=model, on_event=on_event)
             status.update(label="הסקירה הושלמה", state="complete", expanded=False)
-        except Exception as e:  # shown to the user instead of a stack trace
+        except (ValueError, RuntimeError) as e:          # our own, user-readable messages
             status.update(label="הריצה נכשלה", state="error")
-            st.error(f"{type(e).__name__}: {e}")
+            st.error(str(e))
+        except Exception:  # noqa: BLE001 - no internal details on a public page
+            status.update(label="הריצה נכשלה", state="error")
+            st.error("אירעה שגיאה בלתי צפויה. נסי שוב בעוד דקה.")
 
 r = st.session_state.get("result")
 if r:

@@ -108,3 +108,40 @@ def test_agent_that_never_submits_raises(setup):
     client = FakeClient([reply(NS(type="text", text="I could not find papers."), stop="end_turn")])
     with pytest.raises(RuntimeError, match="without submitting"):
         Agent(store, str(tmp), client=client).run("q", out_path=str(tmp / "r.md"))
+
+
+def test_submitting_a_paper_that_was_never_fetched_is_refused(setup):
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp), client=FakeClient([]))
+    out = agent.run_tool("submit_report", {"articles": [article(pid, [{"page": 1, "text": GOOD}])]})
+    assert "never fetched" in out["error"]
+    assert "at least one" in agent.run_tool("submit_report", {"articles": []})["error"]
+
+
+def test_cost_limit_stops_a_runaway_run_and_closes_it(setup, monkeypatch):
+    store, pid, tmp = setup
+    import verified_lit_review.agent as agent_mod
+    monkeypatch.setattr(agent_mod, "MAX_COST_USD", 0.001)
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid))])
+    with pytest.raises(RuntimeError, match="cost limit"):
+        Agent(store, str(tmp), client=client).run("q", out_path=str(tmp / "r.md"))
+    run = store.conn.execute("SELECT finished_at, error, cost_usd FROM runs").fetchone()
+    assert run["finished_at"] and "cost limit" in run["error"] and run["cost_usd"] > 0
+
+
+def test_unexpected_tool_error_is_returned_to_the_model_not_raised(setup, monkeypatch):
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp), client=FakeClient([]))
+    monkeypatch.setattr(agent, "fetch_paper", lambda paper_id: 1 / 0)
+    assert "ZeroDivisionError" in agent.run_tool("fetch_paper", {"paper_id": pid})["error"]
+
+
+def test_served_model_and_cost_are_recorded(setup):
+    store, pid, tmp = setup
+    resp = lambda *b: NS(content=list(b), stop_reason="tool_use", model="claude-opus-5-5",
+                         usage=NS(input_tokens=1000, output_tokens=200))
+    client = FakeClient([resp(tool_call("fetch_paper", paper_id=pid)),
+                         resp(tool_call("submit_report", articles=[article(pid, [{"page": 1, "text": GOOD}])]))])
+    r = Agent(store, str(tmp), client=client).run("q", n_papers=1, out_path=str(tmp / "r.md"))
+    row = store.conn.execute("SELECT served_model, cost_usd FROM runs WHERE run_id=?", (r["run_id"],)).fetchone()
+    assert row["served_model"] == "claude-opus-5-5" and row["cost_usd"] == r["cost_usd"]

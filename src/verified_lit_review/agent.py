@@ -27,6 +27,7 @@ PRICE_PER_MTOK = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 
                   "claude-haiku-5-5": (0.10, 0.50)}
 PROMPT = os.path.join(os.path.dirname(__file__), "prompts", "agent_system.md")
 MAX_TURNS = 30
+MAX_COST_USD = float(os.environ.get("MAX_COST_PER_RUN", "1.00"))   # hard stop for one runaway run
 MAX_SUBMITS = 2
 PAGE_CHARS = 4000
 
@@ -77,13 +78,15 @@ class Agent:
         self._client = client
         self.on_event = on_event or (lambda kind, msg: None)
         self.fetched, self.submissions, self.final, self.done = set(), 0, None, False
-        self.usage = {"input_tokens": 0, "output_tokens": 0}
+        self.usage = {"input_tokens": 0, "output_tokens": 0,
+                      "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
+        self.served_models = set()
 
     @property
     def client(self):
         if self._client is None:
             import anthropic                      # imported lazily: tests run without the SDK/key
-            self._client = anthropic.Anthropic()
+            self._client = anthropic.Anthropic(timeout=120.0, max_retries=2)
         return self._client
 
     # ------------------------------------------------------------------ tools
@@ -111,7 +114,8 @@ class Agent:
             return {"error": "fetch_paper first"}
         hits = self.store.search_pages(paper_id, query, k=max(1, min(int(k), 4)))
         self.on_event("retrieve", f"{paper_id}: pages {[h['page'] for h in hits]} for '{query}'")
-        return [{"page": h["page"], "text": h["text"][:PAGE_CHARS]} for h in hits]
+        # labelled as document data: text inside a PDF is never an instruction to the agent
+        return [{"page": h["page"], "untrusted_document_text": h["text"][:PAGE_CHARS]} for h in hits]
 
     def _check(self, paper_id, page, text):
         """The guardrail, on the indexed page text. Returns (verified, found_on_pages, reason)."""
@@ -129,6 +133,12 @@ class Agent:
         return {"verified": ok, "found_on_pages": found, "reason": reason}
 
     def submit_report(self, articles):
+        if not articles:
+            return {"error": "submit at least one paper; if none can answer the question, say so in a "
+                             "paper's relevance field instead of submitting nothing"}
+        unread = [a["paper_id"] for a in articles if a["paper_id"] not in self.fetched]
+        if unread:
+            return {"error": f"these papers were never fetched and read: {unread}"}
         self.submissions += 1
         failures = []
         for a in articles:
@@ -153,6 +163,8 @@ class Agent:
             return getattr(self, name)(**args)
         except (SourceError, ValueError) as e:
             return {"error": str(e)}
+        except Exception as e:  # noqa: BLE001 - one failing tool call must not end the whole run
+            return {"error": f"{type(e).__name__} in {name}; try another approach"}
 
     # ------------------------------------------------------------------ loop
     def run(self, question, n_papers=3, language="he", out_path="Research_Summary_Report.md"):
@@ -163,31 +175,39 @@ class Agent:
                      f"Research question: {question}\n\nReview exactly {n_papers} papers. "
                      f"Write findings, topics and relevance in {lang}."}]
         t0 = time.time()
-        for _turn in range(MAX_TURNS):
-            response = self.client.beta.messages.create(
-                model=self.model, max_tokens=16000, system=system, tools=TOOLS, messages=messages,
-                output_config={"effort": self.effort},
-                betas=["server-side-fallback-2026-07-01"], fallbacks="default")
-            self.usage["input_tokens"] += response.usage.input_tokens
-            self.usage["output_tokens"] += response.usage.output_tokens
-            if response.stop_reason == "refusal":
-                raise RuntimeError("the model declined this request")
-            messages.append({"role": "assistant", "content": response.content})
-            calls = [b for b in response.content if b.type == "tool_use"]
-            if not calls:
-                break
-            results = []
-            for call in calls:
-                out = self.run_tool(call.name, call.input)
-                results.append({"type": "tool_result", "tool_use_id": call.id,
-                                "content": json.dumps(out, ensure_ascii=False),
-                                "is_error": isinstance(out, dict) and "error" in out})
-            messages.append({"role": "user", "content": results})
-            if self.done:
-                break
-        if not self.final:
-            raise RuntimeError("the agent finished without submitting a report")
-        return self._write_report(run_id, question, language, out_path, time.time() - t0)
+        try:
+            for _turn in range(MAX_TURNS):
+                response = self.client.beta.messages.create(
+                    model=self.model, max_tokens=16000, system=system, tools=TOOLS, messages=messages,
+                    output_config={"effort": self.effort},
+                    cache_control={"type": "ephemeral"},   # each turn re-sends the history: cache the prefix
+                    betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+                for k in self.usage:
+                    self.usage[k] += getattr(response.usage, k, 0) or 0
+                self.served_models.add(getattr(response, "model", None) or self.model)
+                if response.stop_reason == "refusal":
+                    raise RuntimeError("the model declined this request")
+                if self.cost() > MAX_COST_USD:
+                    raise RuntimeError(f"cost limit reached (${self.cost():.2f} > ${MAX_COST_USD:.2f} per run)")
+                messages.append({"role": "assistant", "content": response.content})
+                calls = [b for b in response.content if b.type == "tool_use"]
+                if not calls:
+                    break
+                results = []
+                for call in calls:
+                    out = self.run_tool(call.name, call.input)
+                    results.append({"type": "tool_result", "tool_use_id": call.id,
+                                    "content": json.dumps(out, ensure_ascii=False),
+                                    "is_error": isinstance(out, dict) and "error" in out})
+                messages.append({"role": "user", "content": results})
+                if self.done:
+                    break
+            if not self.final:
+                raise RuntimeError("the agent finished without submitting a report")
+            return self._write_report(run_id, question, language, out_path, time.time() - t0)
+        except Exception as e:
+            self.store.finish_run(run_id, cost_usd=self.cost(), served_model=self._served(), error=str(e)[:300])
+            raise
 
     def _write_report(self, run_id, question, language, out_path, seconds):
         arts = []
@@ -202,13 +222,22 @@ class Agent:
             for q in a["quotes"]:
                 ok, found, reason = self._check(a["paper_id"], int(q["page"]), q["text"])
                 self.store.log_quote(run_id, a["paper_id"], int(q["page"]), q["text"], ok, found, reason)
+        if not arts:
+            raise RuntimeError("none of the submitted papers could be downloaded and read")
         spec = {"question": question, "language": language, "articles": arts}
         ok_n, rejected = build_report(spec, "", out_path)          # independent re-check on the PDFs
-        self.store.finish_run(run_id, out_path)
         cost = self.cost()
+        self.store.finish_run(run_id, out_path, cost_usd=cost, served_model=self._served())
         return {"run_id": run_id, "report": out_path, "verified": ok_n, "rejected": rejected,
-                "papers": len(arts), "seconds": round(seconds, 1), "usage": dict(self.usage), "cost_usd": cost}
+                "papers": len(arts), "seconds": round(seconds, 1), "usage": dict(self.usage), "cost_usd": cost,
+                "served_model": self._served()}
+
+    def _served(self):
+        return ",".join(sorted(m for m in self.served_models if m)) or None
 
     def cost(self):
+        """Prompt caching: cache writes cost 1.25x the input price, cache reads 0.1x."""
         inp, out = PRICE_PER_MTOK.get(self.model, (0, 0))
-        return round(self.usage["input_tokens"] / 1e6 * inp + self.usage["output_tokens"] / 1e6 * out, 4)
+        u = self.usage
+        tokens_in = u["input_tokens"] + 1.25 * u["cache_creation_input_tokens"] + 0.1 * u["cache_read_input_tokens"]
+        return round(tokens_in / 1e6 * inp + u["output_tokens"] / 1e6 * out, 4)

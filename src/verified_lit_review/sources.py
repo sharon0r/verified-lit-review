@@ -15,6 +15,7 @@ Design rules (why this does not get blocked):
 """
 import os
 import re
+import threading
 import time
 import urllib.parse
 
@@ -23,8 +24,16 @@ import requests
 TOOL = "verified-lit-review/0.2 (+https://github.com/sharon0r/verified-lit-review)"
 EPMC_SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"      # biomedicine and life sciences
 OPENALEX_SEARCH = "https://api.openalex.org/works"                           # every discipline
-OPENALEX_FIELDS = ("id,doi,display_name,authorships,publication_year,primary_location,abstract_inverted_index,"
-                   "cited_by_count,best_oa_location,locations,ids")
+OPENALEX_FIELDS = ("id,doi,display_name,type,authorships,publication_year,primary_location,"
+                   "abstract_inverted_index,cited_by_count,best_oa_location,locations,ids")
+
+# Quality filters: peer-reviewed journal literature only.
+#   OpenAlex: articles and reviews, in journals, not retracted, in CWTS "core" journals (international,
+#             citation-based selection that leaves out marginal and predatory venues); open access.
+#   Europe PMC: open access, no preprints (SRC:PPR), no retracted publications.
+OPENALEX_FILTER = ("open_access.is_oa:true,type:article|review,primary_location.source.type:journal,"
+                   "is_retracted:false,primary_location.source.is_core:true")
+EPMC_FILTER = 'OPEN_ACCESS:y AND NOT SRC:PPR AND NOT PUB_TYPE:"retracted publication"'
 
 STOP = {"the", "and", "of", "in", "on", "for", "to", "a", "an", "with", "versus", "vs", "is", "are",
         "does", "do", "can", "what", "which", "how", "effect", "effects", "impact", "role", "study",
@@ -44,12 +53,14 @@ class PoliteClient:
         contact = os.environ.get("CONTACT_EMAIL")
         self.s.headers["User-Agent"] = TOOL + (f" mailto:{contact}" if contact else "")
         self._last = {}
+        self._lock = threading.Lock()
 
     def _wait_turn(self, host):
-        gap = time.monotonic() - self._last.get(host, 0)
-        if gap < self.min_interval:
-            time.sleep(self.min_interval - gap)
-        self._last[host] = time.monotonic()
+        with self._lock:                         # one shared client serves every web-UI session (threads)
+            gap = time.monotonic() - self._last.get(host, 0)
+            if gap < self.min_interval:
+                time.sleep(self.min_interval - gap)
+            self._last[host] = time.monotonic()
 
     def get(self, url, **kw):
         host = urllib.parse.urlparse(url).netloc
@@ -93,7 +104,7 @@ def europepmc_query(question):
     words = keywords(question)
     if not words:
         raise ValueError("the question has no searchable English keywords")
-    return " AND ".join(f'TITLE_ABS:"{w}"' for w in words) + " AND OPEN_ACCESS:y"
+    return " AND ".join(f'TITLE_ABS:"{w}"' for w in words) + " AND " + EPMC_FILTER
 
 
 def _clean(text):
@@ -143,7 +154,8 @@ def search_europepmc(question, store, n=10, max_age_days=30, raw_query=None):
         if stale is not None:
             return stale, "cache (stale, offline)"
         raise SourceError(f"Europe PMC unavailable and nothing cached: {e}") from e
-    store.put_cached_search("europepmc", key, papers)
+    if papers:                                   # an empty answer is not cached (may be a transient glitch)
+        store.put_cached_search("europepmc", key, papers)
     for p in papers:
         store.upsert_paper(p)
     return papers, "network"
@@ -192,7 +204,7 @@ def search_openalex(question, store, n=10, max_age_days=30):
     cached = store.get_cached_search("openalex", key, max_age_days)
     if cached is not None:
         return cached, "cache"
-    params = {"search": q, "filter": "open_access.is_oa:true", "per-page": n, "select": OPENALEX_FIELDS}
+    params = {"search": q, "filter": OPENALEX_FILTER, "per-page": n, "select": OPENALEX_FIELDS}
     if os.environ.get("CONTACT_EMAIL"):
         params["mailto"] = os.environ["CONTACT_EMAIL"]          # OpenAlex "polite pool"
     try:
@@ -202,7 +214,8 @@ def search_openalex(question, store, n=10, max_age_days=30):
         if stale is not None:
             return stale, "cache (stale, offline)"
         raise SourceError(f"OpenAlex unavailable and nothing cached: {e}") from e
-    store.put_cached_search("openalex", key, papers)
+    if papers:                                   # an empty answer is not cached (may be a transient glitch)
+        store.put_cached_search("openalex", key, papers)
     for p in papers:
         store.upsert_paper(p)
     return papers, "network"

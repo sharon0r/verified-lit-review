@@ -14,9 +14,13 @@ with SQL instead of re-reading PDFs. A paper already downloaded and indexed is n
     from verified_lit_review.fetch import fetch_papers
     results = fetch_papers(papers, store, pdf_dir="pdfs", want=3)
 """
+import hashlib
+import ipaddress
 import logging
 import os
 import re
+import socket
+import urllib.parse
 
 import pymupdf
 
@@ -29,9 +33,35 @@ OPENALEX = "https://api.openalex.org/works/doi:"
 MAX_PDF_BYTES = 40 * 1024 * 1024
 
 
-def safe_name(text, max_len=60):
-    text = re.sub(r"[^\w\s-]", "", text or "", flags=re.ASCII)
-    return re.sub(r"\s+", "_", text.strip())[:max_len].rstrip("_") or "paper"
+def safe_name(paper_id, max_len=50):
+    """Readable, filesystem-safe and unique: '10.1000/a.b' and '10.1000/ab' must not collide."""
+    slug = re.sub(r"\s+", "_", re.sub(r"[^\w\s-]", "", paper_id or "", flags=re.ASCII).strip())[:max_len]
+    return f"{slug.rstrip('_') or 'paper'}_{hashlib.sha1((paper_id or '').encode()).hexdigest()[:8]}"
+
+
+def is_public_url(url):
+    """Refuse non-http(s) URLs and hosts that resolve to private, loopback or link-local addresses (SSRF)."""
+    parts = urllib.parse.urlparse(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(parts.hostname, None)
+    except (socket.gaierror, UnicodeError):
+        return True                      # unresolvable: the request itself will fail harmlessly
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            return False
+    return True
+
+
+def _route(fn, arg, empty):
+    """Run one route lookup; a network failure on one route must not stop the others."""
+    try:
+        return fn(arg)
+    except SourceError as e:
+        log.warning("route    %s(%s) failed: %s", fn.__name__, arg, e)
+        return empty
 
 
 # ------------------------------------------------------------------ routes
@@ -72,28 +102,41 @@ def candidate_urls(paper):
                 seen.add(u)
                 yield label, u
 
-    yield from fresh("PMC open-data (AWS)", [pmc_s3_url(paper.get("pmcid"))])
+    yield from fresh("PMC open-data (AWS)", [_route(pmc_s3_url, paper.get("pmcid"), None)])
     yield from fresh("search result link", paper.get("pdf_urls") or [])
-    yield from fresh("OpenAlex", openalex_urls(paper.get("doi")))
+    yield from fresh("OpenAlex", _route(openalex_urls, paper.get("doi"), []))
 
 
 # ------------------------------------------------------------------ download + index
 def download_pdf(url, dest):
-    """Save url to dest only if the body is a real PDF. Returns (ok, message)."""
+    """Save url to dest only if the body is a real PDF under MAX_PDF_BYTES. Returns (ok, message).
+
+    The body is streamed and abandoned as soon as it exceeds the limit, and written to a temporary
+    file that replaces dest atomically, so a half-downloaded file never looks like a paper.
+    """
+    if not is_public_url(url):
+        return False, "refused: not a public http(s) address"
     try:
-        r = client().get(url, allow_redirects=True)
+        r = client().get(url, allow_redirects=True, stream=True)
     except SourceError as e:
         return False, str(e)
     if r.status_code != 200:
         return False, f"HTTP {r.status_code}"
-    body = r.content
+    size = (r.headers or {}).get("Content-Length", "")
+    if size.isdigit() and int(size) > MAX_PDF_BYTES:
+        return False, f"too large ({int(size) // 1_000_000} MB)"
+    body = bytearray()
+    for chunk in (r.iter_content(1 << 16) if hasattr(r, "iter_content") else [r.content]):
+        body += chunk
+        if len(body) > MAX_PDF_BYTES:
+            return False, f"too large (> {MAX_PDF_BYTES // 1_000_000} MB)"
     if not body.startswith(b"%PDF-"):
         return False, "not a PDF (probably an HTML landing page or a bot check)"
-    if len(body) > MAX_PDF_BYTES:
-        return False, f"too large ({len(body) // 1_000_000} MB)"
     os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
-    with open(dest, "wb") as f:
+    tmp = f"{dest}.{os.getpid()}.part"
+    with open(tmp, "wb") as f:
         f.write(body)
+    os.replace(tmp, dest)
     return True, f"{len(body) // 1000} KB"
 
 

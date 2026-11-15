@@ -3,10 +3,12 @@
 import json
 import os
 import time
+import uuid
 
 from .agent import MODEL, Agent
 from .db import Store
 
+MAX_QUESTION_CHARS = 500
 DATA_DIR = os.environ.get("VLR_DATA_DIR", "output")
 DB_PATH = os.environ.get("VLR_DB", os.path.join(DATA_DIR, "medical_cache.db"))
 
@@ -16,10 +18,13 @@ def run_review(question, n_papers=3, language="he", model=MODEL, effort="medium"
     """Run the agent once. Returns the agent's result dict plus the report Markdown."""
     if not question or not question.strip():
         raise ValueError("question is empty")
+    if len(question) > MAX_QUESTION_CHARS:
+        raise ValueError(f"question is longer than {MAX_QUESTION_CHARS} characters")
     if not 1 <= int(n_papers) <= 5:
         raise ValueError("n_papers must be between 1 and 5")
     data_dir = data_dir or DATA_DIR
-    run_dir = os.path.join(data_dir, "runs", time.strftime("%Y%m%d-%H%M%S"))
+    # unique per run: two users starting in the same second must not overwrite each other's report
+    run_dir = os.path.join(data_dir, "runs", f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}")
     os.makedirs(run_dir, exist_ok=True)
     store = Store(db_path or DB_PATH)
     try:

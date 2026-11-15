@@ -54,7 +54,10 @@ CREATE TABLE IF NOT EXISTS runs (
     model       TEXT,
     started_at  REAL NOT NULL,
     finished_at REAL,
-    report_path TEXT
+    report_path TEXT,
+    cost_usd    REAL,
+    served_model TEXT,                      -- the model that actually answered (may differ on fallback)
+    error       TEXT                        -- set when the run failed
 );
 
 CREATE TABLE IF NOT EXISTS quote_checks (
@@ -84,9 +87,15 @@ class Store:
     def __init__(self, path="medical_cache.db"):
         if path != ":memory:":
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        self.conn = sqlite3.connect(path, timeout=30)          # wait up to 30 s for a lock (several users)
         self.conn.row_factory = sqlite3.Row
+        if path != ":memory:":
+            self.conn.execute("PRAGMA journal_mode=WAL")         # readers don't block the writer
         self.conn.executescript(SCHEMA)
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(runs)")}
+        for col, kind in (("cost_usd", "REAL"), ("served_model", "TEXT"), ("error", "TEXT")):
+            if col not in cols:                                 # migrate databases from v0.2.0
+                self.conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {kind}")
 
     def close(self):
         self.conn.close()
@@ -117,7 +126,9 @@ class Store:
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(paper_id) DO UPDATE SET
                        abstract = COALESCE(excluded.abstract, papers.abstract),
-                       pdf_urls = excluded.pdf_urls""",
+                       pmcid    = COALESCE(excluded.pmcid, papers.pmcid),
+                       pdf_urls = CASE WHEN excluded.pdf_urls = '[]' THEN papers.pdf_urls
+                                       ELSE excluded.pdf_urls END""",
                 (paper_id, p.get("doi"), p.get("pmcid"), p["title"], p.get("authors"), p.get("journal"),
                  p.get("year"), p.get("abstract"), json.dumps(p.get("pdf_urls", [])), p.get("source"),
                  time.time()))
@@ -166,10 +177,12 @@ class Store:
                                     (question, model, time.time()))
         return cur.lastrowid
 
-    def finish_run(self, run_id, report_path):
+    def finish_run(self, run_id, report_path=None, cost_usd=None, served_model=None, error=None):
+        """Close a run - also when it failed, so the audit trail never has dangling runs."""
         with self.conn:
-            self.conn.execute("UPDATE runs SET finished_at=?, report_path=? WHERE run_id=?",
-                              (time.time(), report_path, run_id))
+            self.conn.execute(
+                "UPDATE runs SET finished_at=?, report_path=?, cost_usd=?, served_model=?, error=? WHERE run_id=?",
+                (time.time(), report_path, cost_usd, served_model, error, run_id))
 
     def log_quote(self, run_id, paper_id, claimed_page, text, verified, found_on=(), reason=None):
         with self.conn:

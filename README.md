@@ -88,6 +88,9 @@ REST API:
 ## Design decisions
 
 - **Two open databases, chosen per question.** Europe PMC is precise for biomedicine; OpenAlex covers every discipline. The agent decides, and falls back to the other when results are thin.
+- **Peer-reviewed sources only, enforced in code.** OpenAlex: journal articles and reviews, not retracted, in CWTS "core" journals (leaves out marginal and predatory venues). Europe PMC: no preprints, no retracted publications. The prompt repeats the rule; the filters make it true.
+- **Prompt caching.** Each agent turn re-sends the conversation; caching the prefix cut one run from $0.83 to $0.31.
+- **Defence in depth for a public demo.** Password with attempt limit, daily run limit, a per-run cost cap (`MAX_COST_PER_RUN`, default $1), question length limit, the API off unless `API_TOKEN` is set, PDF downloads refused for private/internal addresses (SSRF) and capped at 40 MB while streaming, and document text passed to the model labelled as untrusted data (prompt-injection hygiene).
 - **Official APIs only, politely.** No scraping. An honest User-Agent, at most one request per second per host, exponential back-off that honours `Retry-After`, and a SQLite cache, so a repeated question makes no network calls and still works offline.
 - **A manual tool-use loop** instead of a framework, so every step is visible, testable and logged.
 - **The guardrail lives in code, not in the prompt.** The prompt asks for exact quotes; the code checks them.
@@ -107,7 +110,7 @@ src/verified_lit_review/
   api.py                FastAPI REST API
   md_to_docx.py         Markdown → Word, right-to-left Hebrew aware
 app.py                  Streamlit web UI (Hebrew, right-to-left)
-tests/                  45 tests: guardrail, store, sources, fetch, agent loop, API
+tests/                  61 tests: guardrail, store, sources, fetch, agent loop, API
 ```
 
 ## Tests
@@ -123,6 +126,7 @@ No API key or network is needed: PDFs are generated on the fly, HTTP is faked, a
 - **Normalization is a safety decision.** A first version stripped everything except Latin letters and digits, so `p<0.05` matched `p>0.05` and Hebrew quotes could never verify. A code review caught it.
 - **Read the API's real behaviour.** Europe PMC answers `sort=RELEVANCE` with HTTP 503, which looked like an outage; the default order is already relevance.
 - **Verification must be per page**, not per document, or a correct sentence with a wrong page number passes.
+- **Review your own work adversarially.** Three review passes (QA, security, interviewer) found real bugs: two DOIs mapping to one file name, a failed PMC lookup skipping the other download routes, a re-indexed paper losing its PMCID, and an API with no authentication. All fixed with tests.
 - **Publisher sites block scripts even for open papers.** The PMC open-data bucket on AWS is the reliable route.
 
 ## Limitations

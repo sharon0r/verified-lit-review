@@ -111,3 +111,31 @@ def test_fetch_papers_stops_after_wanted_count(store, route, tmp_path):
               for i in range(5)]
     results = fetch.fetch_papers(papers, store, tmp_path, want=2)
     assert len(results) == 2 and all(r["status"] == "ok" for r in results)
+
+
+def test_safe_name_is_unique_for_similar_ids():
+    assert fetch.safe_name("10.1000/a.b") != fetch.safe_name("10.1000/ab")
+
+
+def test_pmc_lookup_failure_does_not_stop_other_routes(store, route, tmp_path, monkeypatch):
+    route({"https://publisher.example": Resp(content=PDF)})
+    def broken(_pmcid):
+        raise sources.SourceError("S3 down")
+    monkeypatch.setattr(fetch, "pmc_s3_url", broken)
+    r = fetch.fetch_paper(PAPER, store, tmp_path)
+    assert r["status"] == "ok" and r["route"] == "search result link"
+
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1/a.pdf", "http://169.254.169.254/latest/meta-data",
+                                 "file:///etc/passwd", "ftp://example.org/a.pdf", "http://10.0.0.5/x.pdf"])
+def test_private_or_non_http_urls_are_refused(url, tmp_path):
+    ok, msg = fetch.download_pdf(url, str(tmp_path / "x.pdf"))
+    assert not ok and msg.startswith("refused")
+
+
+def test_oversized_pdf_is_refused_by_content_length(store, route, tmp_path):
+    big = Resp(content=PDF)
+    big.headers = {"Content-Length": str(fetch.MAX_PDF_BYTES + 1)}
+    route({"https://publisher.example": big})
+    r = fetch.fetch_paper({**PAPER, "pmcid": None, "doi": None}, store, tmp_path)
+    assert r["status"] == "failed" and "too large" in r["attempts"][0]["result"]

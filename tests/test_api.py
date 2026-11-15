@@ -43,9 +43,10 @@ def client(tmp_path, monkeypatch):
               call("submit_report", articles=[art])]
     real = service.run_review
     monkeypatch.setattr(service, "DB_PATH", db)
+    monkeypatch.setenv("API_TOKEN", "t0ken")
     monkeypatch.setattr(service, "run_review", lambda q, n, lang: real(
         q, n, lang, client=FakeClient(script), data_dir=str(tmp_path), db_path=db))
-    return TestClient(api.app)
+    return TestClient(api.app, headers={"X-API-Key": "t0ken"})
 
 
 def test_health(client):
@@ -69,3 +70,28 @@ def test_invalid_requests_are_rejected(client):
     assert client.post("/reviews", json={"question": "hi"}).status_code == 422
     assert client.post("/reviews", json={"question": "valid question here", "n_papers": 50}).status_code == 422
     assert client.get("/runs/999").status_code == 404
+
+
+def test_api_requires_the_token(client, monkeypatch):
+    assert client.get("/runs", headers={"X-API-Key": "wrong"}).status_code == 401
+    monkeypatch.delenv("API_TOKEN")
+    assert client.get("/runs").status_code == 503          # secure by default: no token, no API
+    assert client.get("/health").status_code == 200
+
+
+def test_unique_run_folders_for_runs_in_the_same_second(tmp_path, monkeypatch):
+    import verified_lit_review.service as svc
+    dirs = set()
+    class Stop(Exception):
+        pass
+    def fake_agent(store, pdf_dir, **kw):
+        class A:
+            def run(self, q, n_papers, language, out_path):
+                dirs.add(out_path)
+                raise Stop()
+        return A()
+    monkeypatch.setattr(svc, "Agent", fake_agent)
+    for _ in range(2):
+        with pytest.raises(Stop):
+            svc.run_review("question text", 1, data_dir=str(tmp_path), db_path=str(tmp_path / "d.db"))
+    assert len(dirs) == 2

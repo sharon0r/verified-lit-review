@@ -78,7 +78,8 @@ def test_store_audit_trail(store):
 def test_query_is_built_from_content_words():
     q = sources.europepmc_query("Does telephone follow-up after discharge reduce readmission?")
     assert q == ('TITLE_ABS:"telephone" AND TITLE_ABS:"follow-up" AND TITLE_ABS:"discharge" '
-                 'AND TITLE_ABS:"readmission" AND OPEN_ACCESS:y')
+                 'AND TITLE_ABS:"readmission" AND ' + sources.EPMC_FILTER)
+    assert "NOT SRC:PPR" in q and "retracted" in q          # no preprints, no retracted papers
 
 
 def test_parse_keeps_open_pdfs_and_skips_bot_protected_links():
@@ -141,10 +142,28 @@ def test_openalex_search_is_cached_and_filtered_to_open_access(store, fake):
     _, s1 = sources.search_openalex("Does formative feedback improve achievement?", store)
     _, s2 = sources.search_openalex("Does formative feedback improve achievement?", store)
     assert (s1, s2) == ("network", "cache") and len(session.calls) == 1
-    assert session.calls[0][1]["params"]["filter"] == "open_access.is_oa:true"
+    f = session.calls[0][1]["params"]["filter"]
+    for required in ("open_access.is_oa:true", "type:article|review", "source.type:journal",
+                     "is_retracted:false", "is_core:true"):
+        assert required in f
     assert store.get_paper("10.5/edu")["title"] == "Formative feedback"
 
 
 def test_user_agent_names_the_tool():
     c = sources.PoliteClient(session=FakeSession([]))
     assert c.s.headers["User-Agent"].startswith("verified-lit-review/")
+
+
+def test_empty_search_result_is_not_cached(store, fake):
+    session = fake([FakeResponse(data={"results": []}), FakeResponse(data=OPENALEX_JSON)])
+    first, _ = sources.search_openalex("formative feedback", store)
+    second, status = sources.search_openalex("formative feedback", store)
+    assert first == [] and status == "network" and len(second) == 1 and len(session.calls) == 2
+
+
+def test_upsert_keeps_pmcid_and_pdf_links_from_an_earlier_source(store):
+    store.upsert_paper({"doi": "10.1/k", "pmcid": "PMC5", "title": "T", "source": "europepmc",
+                        "pdf_urls": ["https://x.example/a.pdf"]})
+    store.upsert_paper({"doi": "10.1/k", "pmcid": None, "title": "T", "source": "openalex", "pdf_urls": []})
+    p = store.get_paper("10.1/k")
+    assert p["pmcid"] == "PMC5" and p["pdf_urls"] == ["https://x.example/a.pdf"]
