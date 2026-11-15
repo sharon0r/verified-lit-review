@@ -50,11 +50,14 @@ LABELS = {
                cols=["#", "נושא", "שם המאמר", "מחברים", "שנה", "מקור"], article="שם המאמר",
                authors="מחברים", source="מקור", type="סוג המחקר", file="קובץ",
                why="למה נבחר", database="נמצא במאגר", route="הורד דרך",
+               numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא נמצאו במאמר",
+               no_numbers="אין מספרים לבדיקה",
                findings="עיקרי הממצאים", relevance="רלוונטיות והסתייגויות", quotes="ציטוטים מתוך המאמר",
                pdf_page="עמוד PDF", journal_page="עמוד {} בכתב העת", ok="✅ אומת",
                note=("> **מה מאומת:** כל **ציטוט** נבדק אוטומטית, מילה במילה, מול טקסט עמוד ה-PDF שאליו הוא משויך, "
-                     "וציטוטים שלא אומתו הוסרו. **הממצאים, המסקנה וההסתייגויות** הם סיכום שכתב מודל AI על בסיס המאמרים, "
-                     "ואינם נבדקים אוטומטית. יש לבדוק אותם מול המקור לפני כל שימוש מקצועי."),
+                     "וציטוטים שלא אומתו הוסרו. **המספרים** בממצאים ובמסקנה נבדקים מול המספרים שבמאמר, "
+                     "ומספר שלא נמצא מסומן ⚠️. **הניסוח והפרשנות** הם סיכום שכתב מודל AI ואינם נבדקים אוטומטית. "
+                     "יש לבדוק אותם מול המקור לפני כל שימוש מקצועי."),
                conclusion="מסקנה: מה הספרות אומרת על השאלה",
                certainty="ודאות הראיות (בסגנון GRADE, הערכה משוערת)",
                scope=("> **היקף:** {n} מאמרים בגישה פתוחה שבחר סוכן AI מתוך תוצאות החיפוש. זו סקירה ראשונית "
@@ -64,12 +67,15 @@ LABELS = {
                cols=["#", "Topic", "Title", "Authors", "Year", "Source"], article="Title",
                authors="Authors", source="Source", type="Study type", file="File",
                why="Why chosen", database="Found in", route="downloaded via",
+               numbers="Numbers checked against the paper", found="found", not_found="not found in the paper",
+               no_numbers="no numbers to check",
                findings="Key findings", relevance="Relevance and caveats", quotes="Quotes from the article",
                pdf_page="PDF page", journal_page="journal p. {}", ok="✅ verified",
                note=("> **What is verified:** every **quote** was automatically checked, word for word, against the "
-                     "text of the PDF page it is attributed to; unverified quotes were removed. **Findings, the "
-                     "conclusion and caveats** are an AI-written summary of the papers and are not machine-checked; "
-                     "verify them against the source before professional use."),
+                     "text of the PDF page it is attributed to; unverified quotes were removed. **Numbers** in the "
+                     "findings and the conclusion are checked against the numbers printed in the paper; a number that "
+                     "is not found is marked ⚠️. **Wording and interpretation** are an AI-written summary and are not "
+                     "machine-checked; verify them against the source before professional use."),
                conclusion="Conclusion: what the literature says",
                certainty="Certainty of evidence (GRADE-style, approximate)",
                scope=("> **Scope:** {n} open-access papers chosen by an AI agent from the search results. This is a "
@@ -99,6 +105,15 @@ def norm(text):
     return re.sub(r"[^\w<>≤≥=±%" + DECIMAL + MINUS + r"]|_", "", t)
 
 
+def number_line(L, result):
+    """'Numbers checked against the paper: 7/8 found · ⚠️ not found: 0.72' (or 'none to check')."""
+    ok, bad = result.get("verified", []), result.get("unverified", [])
+    if not ok and not bad:
+        return f"_{L['numbers']}: {L['no_numbers']}_"
+    line = f"_{L['numbers']}: {len(ok)}/{len(ok) + len(bad)} {L['found']}_"
+    return line + (f" · ⚠️ **{L['not_found']}:** {', '.join(bad)}" if bad else " ✅")
+
+
 def md_cell(text):
     return str(text).replace("|", "\\|").replace("\n", " ")
 
@@ -119,6 +134,8 @@ def build_report(spec, pdf_dir, out):
     md += [L["note"], "", L["scope"].format(n=len(arts)), ""]
     if spec.get("conclusion"):                           # the answer first, the evidence after
         md += [f"## {L['conclusion']}", "", spec["conclusion"], ""]
+        if spec.get("conclusion_numbers") is not None:
+            md += [number_line(L, spec["conclusion_numbers"]), ""]
     if spec.get("certainty"):
         md += [f"**{L['certainty']}:** {spec['certainty']}", ""]
     md += [f"## {L['table']}", "",
@@ -151,6 +168,8 @@ def build_report(spec, pdf_dir, out):
             md.append(f"**DOI:** [{a['doi']}](https://doi.org/{a['doi']})  ")
         md += [f"**{L['file']}:** `{os.path.basename(a['file'])}`", "", f"### {L['findings']}", ""]  # no local paths
         md += [f"- {b}" for b in a.get("bullets", [])]
+        if a.get("numbers") is not None:
+            md += ["", number_line(L, a["numbers"])]
         if a.get("relevance"):
             md += ["", f"**{L['relevance']}:** {a['relevance']}"]
         md += ["", f"### {L['quotes']}", ""]

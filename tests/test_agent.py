@@ -188,3 +188,17 @@ def test_quotes_bounced_during_the_run_are_kept_in_the_audit_trail(setup):
                               (r["run_id"],)).fetchall()
     assert [row["verified"] for row in rows] == [1, 0]
     assert "returned to the agent at submission 1" in rows[1]["reason"]
+
+
+def test_invented_number_is_sent_back_and_flagged_if_kept(setup):
+    store, pid, tmp = setup
+    bad = {**article(pid, [{"page": 1, "text": GOOD}]), "bullets": ["Readmission fell from 18.2% to 9.9%."]}
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)),
+                         reply(tool_call("submit_report", articles=[bad])),
+                         reply(tool_call("submit_report", articles=[bad]))])
+    r = Agent(store, str(tmp), client=client).run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
+    feedback = client.requests[2]["messages"][-1]["content"][0]["content"]
+    assert '"accepted": false' in feedback and "9.9" in feedback        # returned to the agent
+    report = (tmp / "r.md").read_text(encoding="utf-8")
+    # 18.2 (finding) and 240 (study type "n=240") are in the paper; 9.9 is not
+    assert "⚠️ **not found in the paper:** 9.9" in report and "2/3 found" in report

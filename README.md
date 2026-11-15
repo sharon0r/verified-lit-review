@@ -42,6 +42,8 @@ flowchart LR
 
 `p>0.05` instead of `p<0.05`, one changed number, or a correct sentence on the wrong page are all rejected. Quotes shorter than 20 normalized characters are rejected as too unspecific to prove anything.
 
+**A second guardrail for numbers.** Findings are the model's own words, so they cannot be matched as text - but the numbers in them can. Every number in the findings and the conclusion (effect sizes, confidence limits, percentages, sample sizes) is looked up among the numbers printed in the paper; a rounded value counts (0.72 for a printed 0.719). Numbers that are not found go back to the agent like rejected quotes, and any that remain are marked ⚠️ in the report. In a heart-failure run, 94 of 94 numbers were found ([report](examples/heart-failure-rehab/Research_Summary_Report.md)). Not checked: wording, context, and the sign of a value.
+
 ## Example run
 
 Question: *Does telephone follow-up after hospital discharge reduce readmissions?* ([full log](examples/telephone-follow-up/run_log.txt) · [report, Hebrew](examples/telephone-follow-up/Research_Summary_Report.md))
@@ -105,11 +107,12 @@ src/verified_lit_review/
   sources.py            polite Europe PMC + OpenAlex clients (rate limit, back-off, offline cache)
   fetch.py              open-access PDF download (PMC on AWS, OpenAlex) + page indexing
   build_report.py       quote normalization + verified Markdown report
+  numbers.py            number guardrail: numbers in findings must appear in the paper
   service.py            one entry point for CLI, UI and API
   api.py                FastAPI REST API
   md_to_docx.py         Markdown → Word, right-to-left Hebrew aware
 app.py                  Streamlit web UI (Hebrew, right-to-left)
-tests/                  61 tests: guardrail, store, sources, fetch, agent loop, API
+tests/                  75 tests: guardrail, store, sources, fetch, agent loop, API
 ```
 
 ## Tests

@@ -17,6 +17,7 @@ import json
 import os
 import time
 
+from . import numbers
 from .build_report import MIN_QUOTE_CHARS, build_report, norm
 from .db import Store
 from .fetch import fetch_paper
@@ -97,6 +98,7 @@ class Agent:
                       "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
         self.served_models = set()
         self.bounced = []          # quotes the guardrail rejected during the run (audit trail)
+        self._paper_numbers = {}   # paper_id -> numbers.PaperNumbers (cached per run)
 
     @property
     def client(self):
@@ -144,6 +146,24 @@ class Agent:
             return True, found, None
         return False, found, (f"not on page {page}; found on {found}" if found else "not found in the paper")
 
+    def _numbers(self, paper_id):
+        if paper_id not in self._paper_numbers:
+            rows = self.store.conn.execute("SELECT text FROM pages WHERE paper_id=?", (paper_id,)).fetchall()
+            self._paper_numbers[paper_id] = numbers.PaperNumbers([r["text"] for r in rows])
+        return self._paper_numbers[paper_id]
+
+    def _number_check(self, article):
+        """Numbers in the findings and study description that the paper does not contain."""
+        text = " ".join(article.get("bullets", [])) + " " + article.get("study_type", "")
+        return numbers.check(text, self._numbers(article["paper_id"]))
+
+    def _conclusion_check(self, articles, conclusion):
+        union = numbers.PaperNumbers([])
+        for a in articles:
+            union.exact |= self._numbers(a["paper_id"]).exact
+        union.floats = [float(s) for s in union.exact]
+        return numbers.check(conclusion, union)
+
     def verify_quote(self, paper_id, page, text):
         ok, found, reason = self._check(paper_id, int(page), text)
         return {"verified": ok, "found_on_pages": found, "reason": reason}
@@ -167,12 +187,21 @@ class Agent:
                     self.bounced.append({"submission": self.submissions, "paper_id": a["paper_id"],
                                          "page": int(q["page"]), "text": q["text"], "found_on": found,
                                          "reason": reason})
+        number_warnings = [{"paper_id": a["paper_id"], "numbers_not_in_paper": bad}
+                           for a in articles for bad in [self._number_check(a)[1]] if bad]
+        _, bad_conclusion = self._conclusion_check(articles, conclusion)
+        if bad_conclusion:
+            number_warnings.append({"paper_id": "conclusion", "numbers_not_in_paper": bad_conclusion})
         total = sum(len(a["quotes"]) for a in articles)
-        self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified")
+        n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
+        self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
+                      + (f", {n_bad} number(s) not found in the papers" if n_bad else ""))
         self.final = articles
-        if failures and self.submissions < MAX_SUBMITS:
-            return {"accepted": False, "failures": failures,
-                    "instruction": "Fix or remove these quotes (copy exactly from retrieved pages) and submit again."}
+        if (failures or number_warnings) and self.submissions < MAX_SUBMITS:
+            return {"accepted": False, "failures": failures, "number_warnings": number_warnings,
+                    "instruction": "Fix or remove these quotes (copy exactly from retrieved pages). For numbers "
+                                   "not found in the paper: use the exact value the paper prints, or remove it; "
+                                   "never compute new numbers. Then submit again."}
         self.done = True
         return {"accepted": True, "note": "unverified quotes, if any, will be left out of the report"}
 
@@ -239,6 +268,7 @@ class Agent:
                          "year": p.get("year"), "journal": p.get("journal"), "doi": p.get("doi"),
                          "topic": a["topic"], "study_type": a["study_type"], "bullets": a["bullets"],
                          "why_chosen": a.get("why_chosen", ""),
+                         "numbers": dict(zip(("verified", "unverified"), self._number_check(a))),
                          "database": DATABASE_NAMES.get(p.get("source"), p.get("source")),
                          "download_route": p.get("pdf_route"),
                          "relevance": a["relevance"], "quotes": a["quotes"]})
@@ -254,6 +284,8 @@ class Agent:
                                      f"returned to the agent at submission {b['submission']}: {b['reason']}")
         spec = {"question": question, "language": language, "articles": arts,
                 "conclusion": getattr(self, "conclusion", ""), "pico": getattr(self, "pico", ""),
+                "conclusion_numbers": dict(zip(("verified", "unverified"),
+                                               self._conclusion_check(self.final, getattr(self, "conclusion", "")))),
                 "certainty": getattr(self, "certainty", "")}
         ok_n, rejected = build_report(spec, "", out_path)          # independent re-check on the PDFs
         cost = self.cost()
