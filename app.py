@@ -95,11 +95,7 @@ st.markdown("""<style>
 
 # ------------------------------------------------------------------ sidebar
 with st.sidebar:
-    st.header("הגדרות")
-    n_papers = st.slider("מספר מאמרים", 1, MAX_PAPERS, MAX_PAPERS)
-    language = st.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get, horizontal=True)
     if st.session_state.get("authorized"):  # other people's questions are never shown to visitors
-        st.divider()
         st.subheader("ריצות קודמות")
         for r in service.list_runs(8):
             st.caption(f"#{r['run_id']} · {r['verified']}/{r['quotes']} ✅ · {r['question'][:55]}")
@@ -123,6 +119,11 @@ for col, (label, ex) in zip(cols, EXAMPLES.items()):
         st.session_state.question = ex
 question = st.text_area("שאלת מחקר (באנגלית או בעברית)", key="question", height=80,
                         max_chars=service.MAX_QUESTION_CHARS)
+# the settings sit next to the question, not in the sidebar, which phones hide behind a menu
+_lang_col, _n_col = st.columns(2)
+language = _lang_col.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get,
+                           horizontal=True)
+n_papers = _n_col.slider("מספר מאמרים", 1, MAX_PAPERS, MAX_PAPERS)
 
 
 def show_demo():
