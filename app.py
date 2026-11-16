@@ -22,7 +22,7 @@ from verified_lit_review import service  # noqa: E402
 # Streamlit Cloud keeps secrets in st.secrets; copy them to the environment the agent reads.
 try:
     for _k in ("ANTHROPIC_API_KEY", "APP_PASSWORD", "DAILY_RUN_LIMIT", "MAX_PAPERS", "RUNS_PER_VISITOR",
-               "MAX_COST_PER_RUN"):
+               "MAX_COST_PER_RUN", "OPENALEX_API_KEY"):
         if _k in st.secrets and not os.environ.get(_k):
             os.environ[_k] = str(st.secrets[_k])
 except Exception:  # no secrets file when running locally - environment variables are used instead
@@ -89,8 +89,10 @@ st.markdown("""<style>
   .stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th, .stMarkdown h1, .stMarkdown h2,
   .stMarkdown h3 {unicode-bidi: plaintext; text-align: start;}
   [data-testid="stMetricValue"] {direction: ltr;}
-  /* the page title (st.title) is centered; report headings keep their own direction */
-  [data-testid="stHeading"] h1 {text-align: center !important;}
+  /* less empty space above the page, so the question box is visible without scrolling */
+  .block-container {padding-top: 2rem !important;}
+  .app-title {text-align: center; font-size: 1.6rem; font-weight: 700; margin: 0 0 .25rem 0;
+               line-height: 1.3;}
 </style>""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ sidebar
@@ -103,7 +105,7 @@ with st.sidebar:
     st.markdown(AUTHOR)
 
 # ------------------------------------------------------------------ main
-st.title("📚 סקירת ספרות עם ציטוטים מאומתים")
+st.markdown('<div class="app-title">📚 סקירת ספרות עם ציטוטים מאומתים</div>', unsafe_allow_html=True)
 st.markdown(AUTHOR)
 st.markdown("הזינו שאלת מחקר בכל תחום, וסוכן AI יפיק עבורכם תוך כמה דקות סקירת ספרות ראשונית על סמך עד "
             "חמישה מאמרים אקדמיים בגישה פתוחה. הסוכן מעדיף סקירות שיטתיות ומחקרים בעלי מערך מחקרי חזק, "
