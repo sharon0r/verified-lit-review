@@ -2,6 +2,8 @@
 """One entry point shared by the CLI, the web UI and the REST API."""
 import json
 import os
+import secrets
+import threading
 import time
 import uuid
 
@@ -37,6 +39,45 @@ def run_review(question, n_papers=3, language="he", model=MODEL, effort="medium"
     with open(result["report"], encoding="utf-8") as f:
         result["report_markdown"] = f.read()
     return result
+
+
+# ------------------------------------------------------------------ background runs (web UI)
+# A review takes minutes. On a phone the screen locks or the browser drops the connection, and the
+# page's own script is stopped with it - the money is spent but the report is lost. So the web UI runs
+# the review in a thread that does not belong to the page, and keeps the result here under a random
+# token that the page puts in its URL; a reconnecting page finds the run again by that token.
+_JOBS = {}
+_JOBS_LOCK = threading.Lock()
+JOB_TTL_SECONDS = 6 * 3600
+
+
+def start_job(question, n_papers=3, language="he", model=MODEL, **kw):
+    """Start run_review in a background thread. Returns the token for get_job."""
+    token = secrets.token_urlsafe(16)
+    job = {"events": [], "result": None, "error": None, "done": False, "started": time.time()}
+
+    def work():
+        try:
+            job["result"] = run_review(question, n_papers, language, model=model,
+                                       on_event=lambda kind, msg: job["events"].append((kind, msg)), **kw)
+        except Exception as e:  # noqa: BLE001 - handed to the page, which decides what to show
+            job["error"] = e
+        finally:
+            job["done"] = True
+
+    with _JOBS_LOCK:
+        now = time.time()
+        for old in [t for t, j in _JOBS.items() if now - j["started"] > JOB_TTL_SECONDS]:
+            del _JOBS[old]
+        _JOBS[token] = job
+    threading.Thread(target=work, daemon=True).start()
+    return token
+
+
+def get_job(token):
+    """The background run for this token, or None (unknown token, or the app was restarted)."""
+    with _JOBS_LOCK:
+        return _JOBS.get(token)
 
 
 def get_run(run_id, db_path=None):

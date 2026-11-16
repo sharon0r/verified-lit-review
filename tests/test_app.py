@@ -101,6 +101,28 @@ def test_empty_api_balance_shows_a_clear_message_and_keeps_the_visitors_run(env,
     assert len(at.expander) == 0                 # the example report does not appear in place of a result
 
 
+def test_a_reconnecting_page_gets_the_report_of_the_run_it_started(env, monkeypatch, tmp_path):
+    # the phone locked or the page was refreshed: the run went on in the background, and a new page
+    # with the same URL shows its report (not the example) and counts it as the visitor's run
+    report = tmp_path / "r.md"
+    report.write_text("# My own review", encoding="utf-8")
+    fake = {"papers": 1, "verified": 1, "rejected": [], "cost_usd": 0.5, "seconds": 300, "run_id": 999,
+            "report": str(report), "report_markdown": "# My own review"}
+    monkeypatch.setattr(service, "run_review", lambda *a, **kw: fake)
+    token = service.start_job("q", 1, "en")
+    for _ in range(50):
+        if service.get_job(token)["done"]:
+            break
+        time.sleep(0.05)
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.query_params["job"] = token
+    at.run()
+    assert not at.exception
+    assert any("My own review" in m.value for m in at.markdown)
+    assert len(at.expander) == 0                                   # the example does not replace it
+    assert at.session_state["my_runs"] == 1
+
+
 def test_demo_report_is_shown_without_any_key(env, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY")
     at = AppTest.from_file(APP, default_timeout=30).run()

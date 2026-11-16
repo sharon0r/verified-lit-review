@@ -180,37 +180,63 @@ else:
     st.caption((f"נותרה לכם {runs_text(mine_left)} · " if mine_left else "")
                + f"היום נותרו באתר {runs_text(left_today)} מתוך {DAILY_RUN_LIMIT}")
 
+def follow(job):
+    """Show the background run's progress until it ends. Returns (succeeded, counts_as_a_run)."""
+    with st.status("הסוכן עובד… (אפשר לרענן את הדף, הריצה ממשיכה)", expanded=True) as status:
+        shown = 0
+        while True:
+            done = job["done"]                           # read first: every event is in before done
+            for kind, msg in job["events"][shown:]:
+                st.write(f"{ICONS.get(kind, '•')} {msg}")
+            shown = len(job["events"])
+            if done:
+                break
+            time.sleep(0.5)
+        e = job["error"]
+        if e is None:
+            status.update(label="הסקירה הושלמה", state="complete", expanded=False)
+            return True, True
+        if isinstance(e, ValueError):                    # the question was refused before any model call
+            status.update(label="הריצה לא התחילה", state="error")
+            st.error(hebrew_error(str(e)))
+            return False, False
+        status.update(label="הריצה נכשלה", state="error")
+        if isinstance(e, RuntimeError):                  # the run started (and cost money), then failed
+            st.error(hebrew_error(str(e)))
+            return False, True
+        if service_unavailable(e):                       # our account, not the visitor: keep their trial run
+            st.error("השירות אינו זמין כרגע. הריצה שלכם לא נוצלה, ואפשר לנסות שוב מאוחר יותר.")
+            return False, False
+        st.error("אירעה שגיאה בלתי צפויה. נסו שוב בעוד דקה.")   # no internal details on a public page
+        return False, True
+
+
+# The run lives in a background thread (service.start_job) and its token in the URL, so a phone that
+# locks its screen, or a page refresh, finds the same run again instead of losing a paid report.
+token = st.query_params.get("job")
+job = service.get_job(token) if token else None
+if token and job is None:
+    st.query_params.pop("job", None)
+    if not st.session_state.get("result"):
+        st.info("הריצה הקודמת נקטעה כי האפליקציה הופעלה מחדש. אפשר להריץ שוב.")
 run_failed = False
-if can_run and st.button("▶️ התחילו סקירה", type="primary"):
-    run_failed = True                                    # until the run below succeeds
+if (job is None or job["done"]) and can_run and st.button("▶️ התחילו סקירה", type="primary"):
     if service.runs_since(time.time() - 86400) >= DAILY_RUN_LIMIT:   # re-check right before spending
         st.warning("הריצות של היום נוצלו.")
         st.stop()
-    with st.status("הסוכן עובד…", expanded=True) as status:
-        def on_event(kind, msg):
-            st.write(f"{ICONS.get(kind, '•')} {msg}")
-        try:
-            st.session_state.result = service.run_review(question, n_papers, language, model=MODEL, on_event=on_event)
-            st.session_state.my_runs = my_runs + 1
-            status.update(label="הסקירה הושלמה", state="complete", expanded=False)
-        except ValueError as e:                          # the question was refused before any model call
-            status.update(label="הריצה לא התחילה", state="error")
-            st.error(hebrew_error(str(e)))
-        except RuntimeError as e:                        # the run started (and cost money), then failed
-            st.session_state.my_runs = my_runs + 1
-            status.update(label="הריצה נכשלה", state="error")
-            st.error(hebrew_error(str(e)))
-        except Exception as e:  # noqa: BLE001 - no internal details on a public page
-            status.update(label="הריצה נכשלה", state="error")
-            if service_unavailable(e):               # our account, not the visitor: keep their trial run
-                st.error("השירות אינו זמין כרגע. הריצה שלכם לא נוצלה, ואפשר לנסות שוב מאוחר יותר.")
-            else:
-                st.session_state.my_runs = my_runs + 1
-                st.error("אירעה שגיאה בלתי צפויה. נסו שוב בעוד דקה.")
-        else:
-            run_failed = False
-    if not run_failed:
+    token = service.start_job(question, n_papers, language, model=MODEL)
+    st.query_params["job"] = token
+    job = service.get_job(token)
+if job is not None and st.session_state.get("result_job") != token:
+    ok, counts = follow(job)
+    if counts and st.session_state.get("counted_job") != token:     # each run is counted once
+        st.session_state.counted_job = token
+        st.session_state.my_runs = my_runs + 1
+    if ok:
+        st.session_state.result, st.session_state.result_job = job["result"], token
         st.rerun()                                       # refresh the counters above for the new state
+    run_failed = True
+    st.query_params.pop("job", None)                     # a failed run is shown once, not on every rerun
 
 r = st.session_state.get("result")
 if not r and not run_failed:   # the example never stands in for a visitor's own (failed) run
