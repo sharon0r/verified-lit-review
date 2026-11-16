@@ -234,15 +234,20 @@ class Agent:
                      f"Research question: {question}\n\nReview exactly {n_papers} papers. "
                      f"Write findings, topics and relevance in {lang}."}]
         t0 = time.time()
+        self.timing = {"turns": 0, "model_seconds": 0.0, "tool_seconds": 0.0}
         try:
             for _turn in range(MAX_TURNS):
                 if self.should_stop():
                     raise Cancelled("stopped by the user")
+                t_model = time.time()
                 response = self.client.beta.messages.create(
                     model=self.model, max_tokens=16000, system=system, tools=TOOLS, messages=messages,
                     output_config={"effort": self.effort},
                     cache_control={"type": "ephemeral"},   # each turn re-sends the history: cache the prefix
                     betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+                model_s = time.time() - t_model
+                self.timing["turns"] += 1
+                self.timing["model_seconds"] += model_s
                 for k in self.usage:
                     self.usage[k] += getattr(response.usage, k, 0) or 0
                 self.served_models.add(getattr(response, "model", None) or self.model)
@@ -254,12 +259,17 @@ class Agent:
                 calls = [b for b in response.content if b.type == "tool_use"]
                 if not calls:
                     break
-                results = []
+                results, t_tools = [], time.time()
                 for call in calls:
                     out = self.run_tool(call.name, call.input)
                     results.append({"type": "tool_result", "tool_use_id": call.id,
                                     "content": json.dumps(out, ensure_ascii=False),
                                     "is_error": isinstance(out, dict) and "error" in out})
+                tools_s = time.time() - t_tools
+                self.timing["tool_seconds"] += tools_s
+                self.on_event("timing", f"turn {self.timing['turns']}: model {model_s:.0f}s "
+                              f"({getattr(response.usage, 'output_tokens', 0)} tokens), "
+                              f"{len(calls)} tool call(s) {tools_s:.0f}s")
                 messages.append({"role": "user", "content": results})
                 if self.done:
                     break
@@ -303,7 +313,7 @@ class Agent:
         cost = self.cost()
         self.store.finish_run(run_id, out_path, cost_usd=cost, served_model=self._served())
         return {"run_id": run_id, "report": out_path, "verified": ok_n, "rejected": rejected,
-                "papers": len(arts), "seconds": round(seconds, 1), "usage": dict(self.usage), "cost_usd": cost,
+                "papers": len(arts), "seconds": round(seconds, 1), "timing": dict(getattr(self, "timing", {})), "usage": dict(self.usage), "cost_usd": cost,
                 "served_model": self._served()}
 
     def _served(self):

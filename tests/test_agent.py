@@ -82,7 +82,8 @@ def test_agent_fixes_rejected_quotes_and_report_keeps_only_verified(setup):
     # 2 final quotes verified + the 2 quotes bounced at the first submission (kept in the audit trail)
     assert store.run_summary(r["run_id"]) == {"total": 4, "verified": 2, "rejected": 2}
     assert r["cost_usd"] == round(4000 / 1e6 * 4 + 800 / 1e6 * 20, 4)
-    assert [k for k, _ in events] == ["fetch", "retrieve", "verify", "verify"]
+    assert [k for k, _ in events if k != "timing"] == ["fetch", "retrieve", "verify", "verify"]
+    assert r["timing"]["turns"] >= 3 and "model_seconds" in r["timing"]       # where the run time goes
 
 
 def test_after_last_allowed_submission_bad_quotes_are_dropped_not_trusted(setup):
