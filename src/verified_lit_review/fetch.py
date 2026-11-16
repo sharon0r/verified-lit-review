@@ -31,6 +31,9 @@ log = logging.getLogger(__name__)
 PMC_S3 = "https://pmc-oa-opendata.s3.amazonaws.com/"
 OPENALEX = "https://api.openalex.org/works/doi:"
 MAX_PDF_BYTES = 40 * 1024 * 1024
+# A publisher site that does not answer used to cost up to ~3 minutes per link (45 s x 4 attempts
+# plus back-off) while the agent waited. Downloads fail fast instead; the agent picks another paper.
+PDF_TIMEOUT, PDF_RETRIES = 15, 1
 
 
 def safe_name(paper_id, max_len=50):
@@ -69,7 +72,8 @@ def pmc_s3_url(pmcid):
     """URL of the full-article PDF in the PMC Open Access dataset on AWS, or None."""
     if not pmcid:
         return None
-    r = client().get(PMC_S3, params={"list-type": "2", "prefix": pmcid + "."})
+    r = client().get(PMC_S3, params={"list-type": "2", "prefix": pmcid + "."},
+                     timeout=PDF_TIMEOUT, retries=PDF_RETRIES)
     if r.status_code != 200:
         return None
     keys = [k for k in re.findall(r"<Key>(.*?)</Key>", r.text)
@@ -80,7 +84,7 @@ def pmc_s3_url(pmcid):
 def openalex_urls(doi):
     if not doi:
         return []
-    r = client().get(OPENALEX + doi)
+    r = client().get(OPENALEX + doi, timeout=PDF_TIMEOUT, retries=PDF_RETRIES)
     if r.status_code != 200:
         return []
     work = r.json()
@@ -117,7 +121,7 @@ def download_pdf(url, dest):
     if not is_public_url(url):
         return False, "refused: not a public http(s) address"
     try:
-        r = client().get(url, allow_redirects=True, stream=True)
+        r = client().get(url, allow_redirects=True, stream=True, timeout=PDF_TIMEOUT, retries=PDF_RETRIES)
     except SourceError as e:
         return False, str(e)
     if r.status_code != 200:

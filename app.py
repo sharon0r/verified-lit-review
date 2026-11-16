@@ -9,10 +9,12 @@ Configuration (environment variables, or Streamlit secrets when deployed to the 
   MAX_PAPERS          optional; upper limit for papers per review (default 5)
 """
 import hmac
+import io
 import os
 import subprocess
 import sys
 import time
+import zipfile
 
 import streamlit as st
 
@@ -264,8 +266,16 @@ if r:
     tab_report, tab_audit, tab_how = st.tabs(["📝 הדו\"ח", "🔎 תיעוד אימות (Audit trail)", "⚙️ איך זה עובד"])
     with tab_report:
         st.markdown(r["report_markdown"])
-        d1, d2 = st.columns(2)
+        d1, d2, d3 = st.columns(3)
         d1.download_button("הורדה כ-Markdown", r["report_markdown"], "Research_Summary_Report.md")
+        pdfs = [p for p in r.get("pdfs", []) if os.path.isfile(p)]
+        if pdfs:                     # the papers were already downloaded during the run: no extra wait
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                for p in pdfs:
+                    z.write(p, os.path.basename(p))
+            d3.download_button(f"הורדת המאמרים ({len(pdfs)} PDF)", buf.getvalue(), "papers.zip",
+                               mime="application/zip")
         docx = os.path.splitext(r["report"])[0] + ".docx"
         if not os.path.exists(docx):
             conv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "verified_lit_review", "md_to_docx.py")

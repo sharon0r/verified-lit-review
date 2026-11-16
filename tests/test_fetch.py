@@ -62,6 +62,24 @@ PAPER = {"source": "europepmc", "source_id": "MED:1", "title": "Calls after disc
          "pmcid": "PMC1", "pdf_urls": ["https://publisher.example/x.pdf"]}
 
 
+def test_a_hanging_publisher_costs_seconds_not_minutes(monkeypatch, tmp_path):
+    """A PDF link that times out is tried PDF_RETRIES+1 times with the short timeout, not 4 x 45 s."""
+    import requests
+    seen = []
+
+    class Hanging(Router):
+        def get(self, url, **kw):
+            seen.append(kw.get("timeout"))
+            raise requests.Timeout()
+
+    monkeypatch.setattr(sources, "_client", sources.PoliteClient(min_interval=0, session=Hanging({})))
+    monkeypatch.setattr(sources.time, "sleep", lambda s: None)
+    monkeypatch.setattr(fetch, "is_public_url", lambda u: True)
+    ok, msg = fetch.download_pdf("https://slow.example/x.pdf", str(tmp_path / "x.pdf"))
+    assert not ok and "Timeout" in msg
+    assert seen == [fetch.PDF_TIMEOUT] * (fetch.PDF_RETRIES + 1)
+
+
 def test_pmc_s3_picks_latest_article_pdf_not_supplements(route):
     route({fetch.PMC_S3: Resp(text=S3_LIST)})
     assert fetch.pmc_s3_url("PMC1") == fetch.PMC_S3 + "PMC1.2/PMC1.2.pdf"

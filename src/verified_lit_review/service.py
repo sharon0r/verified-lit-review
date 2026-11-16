@@ -56,10 +56,14 @@ def start_job(question, n_papers=3, language="he", model=MODEL, **kw):
     token = secrets.token_urlsafe(16)
     job = {"events": [], "result": None, "error": None, "done": False, "cancel": False, "started": time.time()}
 
+    def on_event(kind, msg):
+        job["events"].append((kind, msg))
+        if kind in ("timing", "fetch", "search", "verify"):     # also in the host's log (Streamlit "Manage app")
+            print(f"{time.strftime('%H:%M:%S')} [{token[:6]}] {kind}: {msg}", flush=True)
+
     def work():
         try:
-            job["result"] = run_review(question, n_papers, language, model=model,
-                                       on_event=lambda kind, msg: job["events"].append((kind, msg)),
+            job["result"] = run_review(question, n_papers, language, model=model, on_event=on_event,
                                        should_stop=lambda: job["cancel"], **kw)
         except Exception as e:  # noqa: BLE001 - handed to the page, which decides what to show
             job["error"] = e

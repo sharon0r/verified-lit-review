@@ -231,7 +231,8 @@ class Agent:
         system = open(PROMPT, encoding="utf-8").read()
         lang = {"he": "Hebrew", "en": "English"}.get(language, language)
         messages = [{"role": "user", "content":
-                     f"Research question: {question}\n\nReview exactly {n_papers} papers. "
+                     f"Research question: {question}\n\nReview {n_papers} papers (fewer only if "
+                     f"there are not enough direct, fetchable ones). "
                      f"Write findings, topics and relevance in {lang}."}]
         t0 = time.time()
         self.timing = {"turns": 0, "model_seconds": 0.0, "tool_seconds": 0.0}
@@ -313,7 +314,7 @@ class Agent:
         cost = self.cost()
         self.store.finish_run(run_id, out_path, cost_usd=cost, served_model=self._served())
         return {"run_id": run_id, "report": out_path, "verified": ok_n, "rejected": rejected,
-                "papers": len(arts), "seconds": round(seconds, 1), "timing": dict(getattr(self, "timing", {})), "usage": dict(self.usage), "cost_usd": cost,
+                "papers": len(arts), "pdfs": [a["file"] for a in arts], "seconds": round(seconds, 1), "timing": dict(getattr(self, "timing", {})), "usage": dict(self.usage), "cost_usd": cost,
                 "served_model": self._served()}
 
     def _served(self):

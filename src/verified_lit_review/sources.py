@@ -62,13 +62,15 @@ class PoliteClient:
                 time.sleep(self.min_interval - gap)
             self._last[host] = time.monotonic()
 
-    def get(self, url, **kw):
+    def get(self, url, retries=None, timeout=None, **kw):
+        """retries/timeout override the defaults for one call (PDF downloads use short ones)."""
+        retries = self.retries if retries is None else retries
         host = urllib.parse.urlparse(url).netloc
         delay, last_err = 2.0, None
-        for attempt in range(self.retries + 1):
+        for attempt in range(retries + 1):
             self._wait_turn(host)
             try:
-                r = self.s.get(url, timeout=self.timeout, **kw)
+                r = self.s.get(url, timeout=timeout or self.timeout, **kw)
             except requests.RequestException as e:      # no internet, DNS failure, timeout ...
                 last_err = f"{e.__class__.__name__}"
             else:
@@ -79,10 +81,10 @@ class PoliteClient:
                         delay = max(delay, min(int(retry_after), 60))
                 else:
                     return r
-            if attempt < self.retries:
+            if attempt < retries:
                 time.sleep(delay)
                 delay *= 2
-        raise SourceError(f"{host}: {last_err} after {self.retries + 1} attempts")
+        raise SourceError(f"{host}: {last_err} after {retries + 1} attempts")
 
 
 _client = None
