@@ -29,7 +29,7 @@ flowchart LR
     Q[Research question] --> A{{AI agent}}
     A -- searches --> S[(Scholarly databases)]
     A -- reads --> P[(Paper pages<br/>in SQLite)]
-    A -- drafts --> C{Code check:<br/>is every quote and number<br/>in the paper?}
+    A -- drafts --> C{Automatic verification:<br/>is every quote and number<br/>really in the paper?}
     C -- no: fix it --> A
     C -- yes --> R[Verified report]
 ```
@@ -39,7 +39,7 @@ flowchart LR
 | 1. Search | The agent searches three scholarly databases (PubMed, Europe PMC, OpenAlex) and prefers recent systematic reviews and strong study designs |
 | 2. Read | It downloads the open-access PDFs and reads only the pages most relevant to the question |
 | 3. Write | It writes findings, limitations and exact quotes with page numbers |
-| 4. Verify | Code checks every quote word for word on the cited page, and every number against the paper. Anything that fails goes back to the agent to fix, and is dropped if it still fails |
+| 4. Verify | An automatic check (a program, not the AI) compares every quote word for word on the cited page, and every number against the paper. Anything that fails goes back to the agent to fix, and is dropped if it still fails |
 | 5. Record | Every check is saved, so each claim in the report can be traced back to its source |
 
 ## Results
