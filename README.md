@@ -24,6 +24,16 @@ The tool works in **any field**: medicine, psychology, education, social science
 
 The model may *suggest* a quote or a number. **Only code decides what reaches the report.**
 
+```mermaid
+flowchart LR
+    Q[Research question] --> A{{AI agent}}
+    A -- searches --> S[(Scholarly databases)]
+    A -- reads --> P[(Paper pages<br/>in SQLite)]
+    A -- drafts --> C{Code check:<br/>is every quote and number<br/>in the paper?}
+    C -- no: fix it --> A
+    C -- yes --> R[Verified report]
+```
+
 | Step | What happens |
 |---|---|
 | 1. Search | The agent searches three scholarly databases (PubMed, Europe PMC, OpenAlex) and prefers recent systematic reviews and strong study designs |
