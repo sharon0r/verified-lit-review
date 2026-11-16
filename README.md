@@ -36,7 +36,7 @@ flowchart LR
 
 | Step | What happens |
 |---|---|
-| 1. Search | The agent searches three scholarly databases (PubMed, Europe PMC, OpenAlex) and prefers recent systematic reviews and strong study designs |
+| 1. Search | The agent searches three scholarly databases (PubMed, Europe PMC, OpenAlex) and prefers recent systematic reviews and strong study designs. Among quantitative studies of the same design it prefers larger samples; qualitative studies (such as interviews) are judged by the rigour of their method instead, since a small sample is normal there |
 | 2. Read | It downloads the open-access PDFs and reads only the pages most relevant to the question |
 | 3. Write | It writes findings, limitations and exact quotes with page numbers. It reports the studies' design and number of participants (checked like every other number), and treats a small sample as a weakness when it rates how certain the evidence is |
 | 4. Verify | An automatic check (a program, not the AI) compares every quote word for word on the cited page, and every number against the paper. Anything that fails goes back to the agent to fix, and is dropped if it still fails |
