@@ -74,7 +74,7 @@ AUTHOR = ("נבנה על ידי **שרון וייסברג (Sharon Weissberg)** �
           "[GitHub](https://github.com/sharon0r/verified-lit-review) · "
           "[sharonor.we@gmail.com](mailto:sharonor.we@gmail.com)")
 # One model only: in a review by an AI physician agent, Opus scored 7-9/10 on the same question,
-# Haiku 6 and Sonnet 5 (see EVALUATION.md), so visitors are not offered the cheaper models.
+# Haiku 6 and Sonnet 5 (see docs/EVALUATION.md), so visitors are not offered the cheaper models.
 MODEL = "claude-opus-5-5"
 ICONS = {"search": "🔍", "fetch": "⬇️", "retrieve": "📄", "verify": "✅"}
 
