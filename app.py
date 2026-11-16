@@ -89,6 +89,8 @@ st.markdown("""<style>
   .stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th, .stMarkdown h1, .stMarkdown h2,
   .stMarkdown h3 {unicode-bidi: plaintext; text-align: start;}
   [data-testid="stMetricValue"] {direction: ltr;}
+  /* the page title (st.title) is centered; report headings keep their own direction */
+  [data-testid="stHeading"] h1 {text-align: center !important;}
 </style>""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ sidebar
