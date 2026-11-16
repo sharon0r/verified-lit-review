@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 
-from .agent import MODEL, Agent
+from .agent import MODEL, Agent, Cancelled  # noqa: F401 - Cancelled is re-exported for the web UI
 from .db import Store
 
 MAX_QUESTION_CHARS = 500
@@ -16,7 +16,7 @@ DB_PATH = os.environ.get("VLR_DB", os.path.join(DATA_DIR, "medical_cache.db"))
 
 
 def run_review(question, n_papers=3, language="he", model=MODEL, effort="medium", on_event=None,
-               client=None, data_dir=None, db_path=None):
+               client=None, data_dir=None, db_path=None, should_stop=None):
     """Run the agent once. Returns the agent's result dict plus the report Markdown."""
     if not question or not question.strip():
         raise ValueError("question is empty")
@@ -31,7 +31,7 @@ def run_review(question, n_papers=3, language="he", model=MODEL, effort="medium"
     store = Store(db_path or DB_PATH)
     try:
         agent = Agent(store, os.path.join(data_dir, "pdfs"), client=client, model=model, effort=effort,
-                      on_event=on_event)
+                      on_event=on_event, should_stop=should_stop)
         result = agent.run(question.strip(), n_papers=int(n_papers), language=language,
                            out_path=os.path.join(run_dir, "Research_Summary_Report.md"))
     finally:
@@ -54,12 +54,13 @@ JOB_TTL_SECONDS = 6 * 3600
 def start_job(question, n_papers=3, language="he", model=MODEL, **kw):
     """Start run_review in a background thread. Returns the token for get_job."""
     token = secrets.token_urlsafe(16)
-    job = {"events": [], "result": None, "error": None, "done": False, "started": time.time()}
+    job = {"events": [], "result": None, "error": None, "done": False, "cancel": False, "started": time.time()}
 
     def work():
         try:
             job["result"] = run_review(question, n_papers, language, model=model,
-                                       on_event=lambda kind, msg: job["events"].append((kind, msg)), **kw)
+                                       on_event=lambda kind, msg: job["events"].append((kind, msg)),
+                                       should_stop=lambda: job["cancel"], **kw)
         except Exception as e:  # noqa: BLE001 - handed to the page, which decides what to show
             job["error"] = e
         finally:
@@ -72,6 +73,13 @@ def start_job(question, n_papers=3, language="he", model=MODEL, **kw):
         _JOBS[token] = job
     threading.Thread(target=work, daemon=True).start()
     return token
+
+
+def cancel_job(token):
+    """Ask a background run to stop before its next model call."""
+    job = get_job(token)
+    if job is not None:
+        job["cancel"] = True
 
 
 def get_job(token):

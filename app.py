@@ -183,8 +183,10 @@ else:
 def follow(job):
     """Show the background run's progress until it ends. Returns (succeeded, counts_as_a_run)."""
     with st.status("הסוכן עובד… (אפשר לרענן את הדף, הריצה ממשיכה)", expanded=True) as status:
-        shown = 0
+        shown, clock = 0, st.empty()
         while True:
+            # updating the clock also lets the page notice a button press (e.g. stop) without delay
+            clock.caption(f"⏱️ {int(time.time() - job['started'])} שניות")
             done = job["done"]                           # read first: every event is in before done
             for kind, msg in job["events"][shown:]:
                 st.write(f"{ICONS.get(kind, '•')} {msg}")
@@ -196,6 +198,10 @@ def follow(job):
         if e is None:
             status.update(label="הסקירה הושלמה", state="complete", expanded=False)
             return True, True
+        if isinstance(e, service.Cancelled):             # the visitor pressed stop: keep their trial run
+            status.update(label="הריצה נעצרה", state="error", expanded=False)
+            st.info("הריצה נעצרה. אפשר לתקן את השאלה ולהריץ שוב.")
+            return False, False
         if isinstance(e, ValueError):                    # the question was refused before any model call
             status.update(label="הריצה לא התחילה", state="error")
             st.error(hebrew_error(str(e)))
@@ -228,6 +234,11 @@ if (job is None or job["done"]) and can_run and st.button("▶️ התחילו �
     st.query_params["job"] = token
     job = service.get_job(token)
 if job is not None and st.session_state.get("result_job") != token:
+    # pressing the button reruns the page; the run itself stops before its next model call
+    if not job["done"] and st.button("⏹️ עצרו את הריצה"):
+        service.cancel_job(token)
+    if job["cancel"] and not job["done"]:
+        st.caption("עוצרים… הריצה תיעצר לפני השלב הבא.")
     ok, counts = follow(job)
     if counts and st.session_state.get("counted_job") != token:     # each run is counted once
         st.session_state.counted_job = token

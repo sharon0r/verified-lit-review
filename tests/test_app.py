@@ -123,6 +123,31 @@ def test_a_reconnecting_page_gets_the_report_of_the_run_it_started(env, monkeypa
     assert at.session_state["my_runs"] == 1
 
 
+def test_a_stopped_run_shows_a_note_and_keeps_the_visitors_run(env, monkeypatch):
+    def stopped(*a, **kw):
+        raise service.Cancelled("stopped by the user")
+    monkeypatch.setattr(service, "run_review", stopped)
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    next(b for b in at.button if b.label == "▶️ התחילו סקירה").click().run()
+    assert not at.exception
+    assert "הריצה נעצרה" in at.info[0].value
+    assert "my_runs" not in at.session_state or at.session_state["my_runs"] == 0
+    assert "▶️ התחילו סקירה" in labels(at)
+
+
+def test_cancel_stops_the_agent_before_any_model_call(tmp_path):
+    from verified_lit_review.agent import Agent, Cancelled
+
+    class NoCalls:                       # any model call would fail the test
+        def __getattr__(self, name):
+            raise AssertionError("the model was called after stop")
+    store = Store(str(tmp_path / "c.db"))
+    agent = Agent(store, str(tmp_path / "pdfs"), client=NoCalls(), should_stop=lambda: True)
+    with pytest.raises(Cancelled):
+        agent.run("q", out_path=str(tmp_path / "r.md"))
+    store.close()
+
+
 def test_demo_report_is_shown_without_any_key(env, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY")
     at = AppTest.from_file(APP, default_timeout=30).run()

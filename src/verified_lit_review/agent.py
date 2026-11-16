@@ -29,6 +29,10 @@ PRICE_PER_MTOK = {"claude-opus-5-5": (4.00, 20.00), "claude-sonnet-5-5": (2.00, 
 PROMPT = os.path.join(os.path.dirname(__file__), "prompts", "agent_system.md")
 DATABASE_NAMES = {"europepmc": "Europe PMC", "openalex": "OpenAlex", "pubmed": "PubMed"}
 MAX_TURNS = 30
+
+
+class Cancelled(RuntimeError):
+    """The user stopped the run (checked before each model call, so no further cost)."""
 MAX_COST_USD = float(os.environ.get("MAX_COST_PER_RUN", "1.00"))   # hard stop for one runaway run
 MAX_SUBMITS = 2
 PAGE_CHARS = 4000
@@ -89,10 +93,12 @@ TOOLS = [
 
 
 class Agent:
-    def __init__(self, store, pdf_dir, client=None, model=MODEL, effort="medium", on_event=None):
+    def __init__(self, store, pdf_dir, client=None, model=MODEL, effort="medium", on_event=None,
+                 should_stop=None):
         self.store, self.pdf_dir, self.model, self.effort = store, pdf_dir, model, effort
         self._client = client
         self.on_event = on_event or (lambda kind, msg: None)
+        self.should_stop = should_stop or (lambda: False)   # checked before every paid model call
         self.fetched, self.submissions, self.final, self.done = set(), 0, None, False
         self.usage = {"input_tokens": 0, "output_tokens": 0,
                       "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
@@ -230,6 +236,8 @@ class Agent:
         t0 = time.time()
         try:
             for _turn in range(MAX_TURNS):
+                if self.should_stop():
+                    raise Cancelled("stopped by the user")
                 response = self.client.beta.messages.create(
                     model=self.model, max_tokens=16000, system=system, tools=TOOLS, messages=messages,
                     output_config={"effort": self.effort},
