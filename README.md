@@ -15,7 +15,10 @@ literature review in which every quote and every number is checked by code again
 
 AI chat tools are good at summarizing research and bad at citing it. They produce quotes that sound
 right but were slightly changed, numbers that appear in no paper, or a real sentence attached to the
-wrong page. In a hospital, a wrong number in a summary is a patient-safety problem, not a style problem.
+wrong page. For a student writing a thesis, a researcher preparing a grant or a clinician checking the
+evidence, a wrong citation is not a style problem: it undermines the work built on it.
+
+The tool works in **any field**: medicine, psychology, education, social sciences, engineering and more.
 
 ## What this tool does differently
 
@@ -33,8 +36,9 @@ The model may *suggest* a quote or a number. **Only code decides what reaches th
 
 - **Quotes:** in the saved runs, every quote in the final report was verified against its PDF page.
 - **Numbers:** in a heart-failure report, 94 of 94 numbers were found in their papers.
-- **Quality:** an AI reviewer agent acting as a physician-researcher scored the latest heart-failure
-  report 9/10 (up from 6/10 in the first version). This is an AI judge, not a human expert;
+- **Quality:** AI reviewer agents acting as a physician-researcher and a clinical psychologist reviewed
+  the reports after every change; the latest heart-failure report scored 9/10 (up from 6/10 in the first
+  version). Runs in education and the economics of work were also tested end to end. This is an AI judge, not a human expert;
   method and limits in [docs/EVALUATION.md](docs/EVALUATION.md).
 - **Cost:** about $0.5-1 per review with Claude Opus. Cheaper models were tested and scored lower,
   so the tool uses Opus only.
@@ -68,7 +72,8 @@ output were mine.
 - It checks that quotes and numbers *exist* in the papers; whether the papers were the right choice and
   the interpretation is sound still needs expert review.
 - Open-access papers only, up to five per review. It is a rapid first look, not a systematic review.
-- It handles published papers only. No patient data is, or should ever be, sent to it.
+- It handles published papers only. Personal or confidential data (for example patient records) should
+  never be sent to it.
 
 ## Contact
 
