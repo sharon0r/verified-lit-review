@@ -36,6 +36,10 @@ class Cancelled(RuntimeError):
 MAX_COST_USD = float(os.environ.get("MAX_COST_PER_RUN", "1.00"))   # hard stop for one runaway run
 MAX_SUBMITS = 2
 PAGE_CHARS = 4000
+# Every turn re-sends the whole conversation, so turns cost both time and money. Measured runs spent
+# up to 10 turns searching again after failed downloads; the code now ends the search phase.
+MAX_SEARCH_TURNS = 3
+ABSTRACT_CHARS = 800
 
 
 def _schema(props, required=None):
@@ -66,7 +70,9 @@ TOOLS = [
                               "database": {"type": "string", "enum": ["pubmed_reviews", "europepmc", "openalex"]},
                               "n": {"type": "integer", "description": "results, 1-15"}})},
     {"name": "fetch_paper", "strict": True,
-     "description": "Download a paper's open-access PDF and index its pages. Call before reading it.",
+     "description": "Download a paper's open-access PDF and index its pages. Call before reading it. "
+                    "About a third of downloads fail (publishers block them): in the same turn, fetch "
+                    "your chosen papers plus 1-2 spare candidates, then use the ones that worked.",
      "input_schema": _schema({"paper_id": {"type": "string"}})},
     {"name": "retrieve_passages", "strict": True,
      "description": "Return the pages of a fetched paper that best match the query, with page numbers.",
@@ -100,6 +106,7 @@ class Agent:
         self.on_event = on_event or (lambda kind, msg: None)
         self.should_stop = should_stop or (lambda: False)   # checked before every paid model call
         self.fetched, self.submissions, self.final, self.done = set(), 0, None, False
+        self.search_turns = 0
         self.usage = {"input_tokens": 0, "output_tokens": 0,
                       "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
         self.served_models = set()
@@ -115,12 +122,15 @@ class Agent:
 
     # ------------------------------------------------------------------ tools
     def search_papers(self, query, database="openalex", n=8):
+        if self.search_turns > MAX_SEARCH_TURNS:
+            return {"error": f"search budget used ({MAX_SEARCH_TURNS} search turns). Choose from the "
+                             "candidates you already have; review fewer papers if no direct one is left."}
         search = SEARCHERS.get(database, SEARCHERS["openalex"])
         papers, status = search(query, self.store, n=max(1, min(int(n), 15)))
         self.on_event("search", f"[{database}] '{query}': {len(papers)} papers ({status})")
         return [{"paper_id": self.store.upsert_paper(p), "title": p["title"], "year": p["year"],
                  "journal": p["journal"], "citations": p.get("citations", 0),
-                 "abstract": (p.get("abstract") or "")[:1200]} for p in papers]
+                 "abstract": (p.get("abstract") or "")[:ABSTRACT_CHARS]} for p in papers]
 
     def fetch_paper(self, paper_id):
         paper = self.store.get_paper(paper_id)
@@ -129,7 +139,8 @@ class Agent:
         r = fetch_paper(paper, self.store, self.pdf_dir)
         self.on_event("fetch", f"{paper_id}: {r['status']}" + (f", {r['pages']} pages" if r.get("pages") else ""))
         if r["status"] == "failed":
-            return {"status": "failed", "reason": "no open-access PDF could be downloaded; choose another paper"}
+            return {"status": "failed", "reason": "no open-access PDF could be downloaded; use a spare or "
+                                                  "another candidate you already found"}
         self.fetched.add(paper_id)
         return {"status": "ok", "pages": r["pages"]}
 
@@ -260,6 +271,8 @@ class Agent:
                 calls = [b for b in response.content if b.type == "tool_use"]
                 if not calls:
                     break
+                if any(c.name == "search_papers" for c in calls):
+                    self.search_turns += 1
                 results, t_tools = [], time.time()
                 for call in calls:
                     out = self.run_tool(call.name, call.input)
@@ -314,7 +327,7 @@ class Agent:
         cost = self.cost()
         self.store.finish_run(run_id, out_path, cost_usd=cost, served_model=self._served())
         return {"run_id": run_id, "report": out_path, "verified": ok_n, "rejected": rejected,
-                "papers": len(arts), "pdfs": [a["file"] for a in arts], "seconds": round(seconds, 1), "timing": dict(getattr(self, "timing", {})), "usage": dict(self.usage), "cost_usd": cost,
+                "papers": len(arts), "seconds": round(seconds, 1), "timing": dict(getattr(self, "timing", {})), "usage": dict(self.usage), "cost_usd": cost,
                 "served_model": self._served()}
 
     def _served(self):

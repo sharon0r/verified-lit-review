@@ -56,6 +56,20 @@ def fake(monkeypatch):
     return install
 
 
+def test_daily_limit_fails_at_once_instead_of_waiting_minutes(fake):
+    session = fake([FakeResponse(429, headers={"Retry-After": "35864"}), FakeResponse(200, data={})])
+    with pytest.raises(sources.SourceError, match="daily limit"):
+        sources.client().get("https://api.openalex.org/works")
+    assert len(session.calls) == 1
+
+
+def test_openalex_api_key_is_sent_when_set(fake, store, monkeypatch):
+    monkeypatch.setenv("OPENALEX_API_KEY", "k123")
+    session = fake([FakeResponse(200, data={"results": []})])
+    sources.search_openalex("project based learning", store, n=3)
+    assert session.calls[0][1]["params"]["api_key"] == "k123"
+
+
 # ------------------------------------------------------------------ store
 def test_store_page_search_ranks_relevant_page_first(store):
     store.upsert_paper({"doi": "10.1/a", "title": "A", "source": "test"})

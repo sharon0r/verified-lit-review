@@ -77,8 +77,13 @@ class PoliteClient:
                 if r.status_code == 429 or r.status_code >= 500:
                     last_err = f"HTTP {r.status_code}"
                     retry_after = r.headers.get("Retry-After", "")
+                    if retry_after.isdigit() and int(retry_after) > 60:
+                        # e.g. OpenAlex's daily budget is used up until tomorrow: waiting 60+120+240 s
+                        # only made the visitor wait minutes for the same refusal
+                        raise SourceError(f"{host}: HTTP {r.status_code}, retry after {retry_after} s "
+                                          "(daily limit reached)")
                     if retry_after.isdigit():
-                        delay = max(delay, min(int(retry_after), 60))
+                        delay = max(delay, int(retry_after))
                 else:
                     return r
             if attempt < retries:
@@ -212,6 +217,10 @@ def search_openalex(question, store, n=10, max_age_days=30):
     if cached is not None:
         return cached, "cache"
     params = {"search": q, "filter": OPENALEX_FILTER, "per-page": n, "select": OPENALEX_FIELDS}
+    if os.environ.get("OPENALEX_API_KEY"):
+        # free key: about 1,000 searches a day instead of about 100 per IP address without one,
+        # and a cloud host's IP address is shared with other apps
+        params["api_key"] = os.environ["OPENALEX_API_KEY"]
     if os.environ.get("CONTACT_EMAIL"):
         params["mailto"] = os.environ["CONTACT_EMAIL"]          # OpenAlex "polite pool"
     try:

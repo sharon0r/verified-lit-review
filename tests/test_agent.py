@@ -57,6 +57,23 @@ def article(pid, quotes):
             "quotes": quotes}
 
 
+def test_search_budget_ends_the_search_phase(setup, monkeypatch):
+    """After MAX_SEARCH_TURNS turns with searches, search_papers refuses instead of searching again."""
+    from verified_lit_review import agent as agent_mod
+    store, pid, tmp = setup
+    searched = []
+    monkeypatch.setitem(agent_mod.SEARCHERS, "openalex", lambda q, s, n: (searched.append(q) or [], "test"))
+    turns = [reply(tool_call("search_papers", query=f"q{i}", database="openalex", n=5))
+             for i in range(agent_mod.MAX_SEARCH_TURNS + 1)]
+    client = FakeClient(turns + [reply(tool_call("fetch_paper", paper_id=pid)),
+                                 reply(tool_call("submit_report", articles=[article(pid, [{"page": 1, "text": GOOD}])])),
+                                 reply(NS(type="text", text="done"), stop="end_turn")])
+    Agent(store, str(tmp), client=client).run("q", n_papers=1, out_path=str(tmp / "r.md"))
+    assert len(searched) == agent_mod.MAX_SEARCH_TURNS
+    refused = client.requests[agent_mod.MAX_SEARCH_TURNS + 1]["messages"][-1]["content"][0]
+    assert refused["is_error"] and "search budget" in refused["content"]
+
+
 def test_agent_fixes_rejected_quotes_and_report_keeps_only_verified(setup):
     store, pid, tmp = setup
     client = FakeClient([
