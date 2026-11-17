@@ -550,6 +550,8 @@ class Agent:
                 results, t_tools = [], time.time()
                 for call in calls:
                     out = self.run_tool(call.name, call.input)
+                    if isinstance(out, dict) and "error" in out:    # visible in the host log, not only to the model
+                        self.on_event("tool_error", f"{call.name}: {str(out['error'])[:200]}")
                     results.append({"type": "tool_result", "tool_use_id": call.id,
                                     "content": json.dumps(out, ensure_ascii=False),
                                     "is_error": isinstance(out, dict) and "error" in out})

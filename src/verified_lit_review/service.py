@@ -58,7 +58,7 @@ def start_job(question, n_papers=3, language="he", model=MODEL, **kw):
 
     def on_event(kind, msg):
         job["events"].append((kind, msg))
-        if kind in ("timing", "fetch", "search", "verify"):     # also in the host's log (Streamlit "Manage app")
+        if kind in ("timing", "fetch", "search", "verify", "tool_error"):     # also in the host's log (Streamlit "Manage app")
             print(f"{time.strftime('%H:%M:%S')} [{token[:6]}] {kind}: {msg}", flush=True)
 
     def work():
