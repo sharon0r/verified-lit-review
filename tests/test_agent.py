@@ -57,6 +57,16 @@ def article(pid, quotes):
             "quotes": quotes}
 
 
+def test_invented_author_name_is_caught_and_real_one_passes(setup):
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    arts = [article(pid, [])]
+    assert agent._name_check(arts, "The review by Woodend and colleagues (2016) found 5 of 10.") == ["Woodend"]
+    assert agent._name_check(arts, "Doe et al. found that 5 of 10 studies were effective.") == []
+    assert agent._name_check(arts, "Doe ועמיתיו מצאו ירידה.") == []
+
+
 def test_search_budget_ends_the_search_phase(setup, monkeypatch):
     """After MAX_SEARCH_TURNS turns with searches, search_papers refuses instead of searching again."""
     from verified_lit_review import agent as agent_mod

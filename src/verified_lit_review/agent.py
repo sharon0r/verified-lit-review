@@ -15,6 +15,7 @@ written to the audit trail (quote_checks table), together with the run's model a
 """
 import json
 import os
+import re
 import time
 
 from . import numbers
@@ -40,6 +41,10 @@ PAGE_CHARS = 4000
 # up to 10 turns searching again after failed downloads; the code now ends the search phase.
 MAX_SEARCH_TURNS = 3
 ABSTRACT_CHARS = 800
+# "Woodend and colleagues", "Smith et al.", "Smith ועמיתיה", "(Smith, 2016)": a name used to cite a paper.
+# A hospital reviewer found an invented author name in a conclusion; numbers were checked, names were not.
+CITED_NAME = re.compile(r"\b([A-Z][A-Za-z'\-]{2,})(?=\s*(?:et al|and colleagues|and co-workers|ועמית|ושות|וחבר"
+                        r"|,\s*(?:19|20)\d\d))")
 
 
 def _schema(props, required=None):
@@ -107,6 +112,7 @@ class Agent:
         self.should_stop = should_stop or (lambda: False)   # checked before every paid model call
         self.fetched, self.submissions, self.final, self.done = set(), 0, None, False
         self.search_turns = 0
+        self.author_words = set()  # every word of every author list the searches returned
         self.usage = {"input_tokens": 0, "output_tokens": 0,
                       "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
         self.served_models = set()
@@ -128,7 +134,11 @@ class Agent:
         search = SEARCHERS.get(database, SEARCHERS["openalex"])
         papers, status = search(query, self.store, n=max(1, min(int(n), 15)))
         self.on_event("search", f"[{database}] '{query}': {len(papers)} papers ({status})")
+        for p in papers:
+            self.author_words.update(w.lower() for w in re.findall(r"[^\W\d_]{2,}", p.get("authors") or ""))
+        # authors are given so the agent never has to name a paper's authors from memory
         return [{"paper_id": self.store.upsert_paper(p), "title": p["title"], "year": p["year"],
+                 "authors": (p.get("authors") or "")[:80],
                  "journal": p["journal"], "citations": p.get("citations", 0),
                  "abstract": (p.get("abstract") or "")[:ABSTRACT_CHARS]} for p in papers]
 
@@ -184,6 +194,24 @@ class Agent:
             traced += [q["text"] for q in a["quotes"] if self._check(a["paper_id"], int(q["page"]), q["text"])[0]]
         return numbers.check(conclusion, numbers.PaperNumbers([" ".join(traced)]))
 
+    def _name_check(self, articles, conclusion):
+        """Author names used to cite a paper that appear in no search result and in no fetched paper."""
+        texts = [conclusion] + [" ".join([a.get("why_chosen", ""), a.get("relevance", "")] + a.get("bullets", []))
+                                for a in articles]
+        for a in articles:
+            self.author_words.update(w.lower() for w in re.findall(
+                r"[^\W\d_]{2,}", (self.store.get_paper(a["paper_id"]) or {}).get("authors") or ""))
+        bad = []
+        for name in {m for t in texts for m in CITED_NAME.findall(t or "")}:
+            if name.lower() in self.author_words:
+                continue
+            found = self.store.conn.execute(
+                "SELECT 1 FROM pages WHERE paper_id IN ({}) AND text LIKE ? LIMIT 1".format(
+                    ",".join("?" * len(self.fetched)) or "''"), (*self.fetched, f"%{name}%")).fetchone()
+            if not found:
+                bad.append(name)
+        return sorted(bad)
+
     def verify_quote(self, paper_id, page, text):
         ok, found, reason = self._check(paper_id, int(page), text)
         return {"verified": ok, "found_on_pages": found, "reason": reason}
@@ -212,17 +240,23 @@ class Agent:
         _, bad_conclusion = self._conclusion_check(articles, conclusion)
         if bad_conclusion:
             number_warnings.append({"paper_id": "conclusion", "numbers_not_in_paper": bad_conclusion})
+        bad_names = self._name_check(articles, conclusion)
         total = sum(len(a["quotes"]) for a in articles)
         n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
+        retry = (failures or number_warnings or bad_names) and self.submissions < MAX_SUBMITS
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
-                      + (f", {n_bad} number(s) not found in the papers" if n_bad else ""))
+                      + (f", {n_bad} number(s) not found in the papers" if n_bad else "")
+                      + (f", author name(s) not in any paper: {', '.join(bad_names)}" if bad_names else "")
+                      + (" - sent back to the agent to correct (about a minute)" if retry else ""))
         self.final = articles
-        if (failures or number_warnings) and self.submissions < MAX_SUBMITS:
+        if retry:
             return {"accepted": False, "failures": failures, "number_warnings": number_warnings,
+                    "author_names_not_found": bad_names,
                     "instruction": "Fix or remove these quotes (copy exactly from retrieved pages). For numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
                                    "never compute new numbers. A number in the conclusion must also appear in "
-                                   "a finding or quote of the paper it comes from. Then submit again."}
+                                   "a finding or quote of the paper it comes from. Author names not found: use "
+                                   "the first author exactly as the search results list it. Then submit again."}
         self.done = True
         return {"accepted": True, "note": "unverified quotes, if any, will be left out of the report"}
 
