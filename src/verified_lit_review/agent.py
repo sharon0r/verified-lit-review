@@ -311,6 +311,18 @@ class Agent:
             long.append(f"bottom_line must be 1-2 sentences, at most {BOTTOM_LINE_MAX_WORDS} words")
         return long
 
+    @staticmethod
+    def _certainty_verb_check(certainty, conclusion, bottom_line):
+        """GRADE wording: 'probably reduces' belongs to moderate certainty. A cloud report rated the
+        evidence low and still wrote 'probably reduces' (כנראה מפחיתה) - a physician noticed at once."""
+        # only the level the paragraph opens with: "moderate for X; low for VAP" is not low
+        if not re.match(r"\W*(?:very low|low|נמוכה)", certainty.strip().lower()):
+            return []
+        if re.search(r"\bprobably\b|כנראה", f"{bottom_line} {conclusion}", re.IGNORECASE):
+            return ["certainty is low, so the bottom line and conclusion say 'may reduce' (עשויה להפחית), "
+                    "not 'probably' (כנראה), which is the wording for moderate certainty"]
+        return []
+
     def submit_report(self, articles, conclusion="", pico="", certainty="", not_read=None, bottom_line=""):
         self.last_submission = {"articles": articles, "conclusion": conclusion, "pico": pico,
                                 "certainty": certainty, "not_read": not_read or [], "bottom_line": bottom_line}
@@ -339,7 +351,8 @@ class Agent:
         if bad_conclusion:
             number_warnings.append({"paper_id": "conclusion", "numbers_not_in_paper": bad_conclusion})
         bad_names = self._name_check(articles, conclusion + " " + bottom_line)
-        too_long = self._length_check(conclusion, bottom_line)
+        too_long = (self._length_check(conclusion, bottom_line)
+                    + self._certainty_verb_check(certainty, conclusion, bottom_line))
         total = sum(len(a["quotes"]) for a in articles)
         n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
         retry = ((failures or number_warnings or bad_names or not_read_numbers or too_long)

@@ -119,6 +119,17 @@ def test_too_long_conclusion_is_sent_back(setup):
     assert r["accepted"] is False and "conclusion has" in r["too_long"][0]
 
 
+def test_probably_with_low_certainty_is_sent_back(setup):
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    r = agent.submit_report([article(pid, [{"page": 1, "text": GOOD}])], certainty="נמוכה (משוער).",
+                            bottom_line="רחצה כנראה מפחיתה זיהומים.")
+    assert r["accepted"] is False and "עשויה להפחית" in r["too_long"][0]
+    # moderate certainty may say "probably"; a low rating for a secondary outcome does not count
+    assert Agent._certainty_verb_check("Moderate for BSI; low for VAP.", "probably reduces", "") == []
+
+
 def test_reply_cut_off_at_the_output_limit_is_not_run_and_the_model_is_told(setup):
     store, pid, tmp = setup
     cut = reply(tool_call("submit_report", articles=[{"paper_id": pid}]), stop="max_tokens")
