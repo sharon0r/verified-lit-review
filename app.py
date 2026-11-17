@@ -17,7 +17,37 @@ import time
 import streamlit as st
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+import glob  # noqa: E402
+import importlib  # noqa: E402
+
 from verified_lit_review import scope, service  # noqa: E402
+
+# After a push, Streamlit reruns this file but keeps the imported package in memory: a cloud run
+# after a push still used the old report layout and the old output limit. So reload the package when
+# its files change, and keep the background runs that are in progress.
+_PKG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "verified_lit_review")
+_stamp = max(os.path.getmtime(f) for f in glob.glob(os.path.join(_PKG, "*.py")))
+if getattr(service, "_CODE_STAMP", None) != _stamp:     # None: loaded before this check existed
+    _jobs, _lock = service._JOBS, service._JOBS_LOCK
+    for _name in ("numbers", "db", "sources", "fetch", "build_report", "agent", "scope", "service"):
+        if f"verified_lit_review.{_name}" in sys.modules:
+            importlib.reload(sys.modules[f"verified_lit_review.{_name}"])   # same module object, new code
+    service._JOBS, service._JOBS_LOCK = _jobs, _lock
+service._CODE_STAMP = _stamp
+
+
+def code_version():
+    """Short commit id of the deployed code, shown at the bottom of the page."""
+    git = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".git")
+    try:
+        with open(os.path.join(git, "HEAD"), encoding="utf-8") as f:
+            head = f.read().strip()
+        if head.startswith("ref: "):
+            with open(os.path.join(git, head[5:]), encoding="utf-8") as f:
+                head = f.read().strip()
+        return head[:7]
+    except OSError:
+        return ""
 
 # Streamlit Cloud keeps secrets in st.secrets; copy them to the environment the agent reads.
 try:
@@ -175,13 +205,17 @@ else:
 def follow(job):
     """Show the background run's progress until it ends. Returns (succeeded, counts_as_a_run)."""
     with st.status("הסוכן עובד… (אפשר לרענן את הדף, הריצה ממשיכה)", expanded=True) as status:
-        shown, clock = 0, st.empty()
+        shown, clock, last_event = 0, st.empty(), time.time()
         while True:
             # updating the clock also lets the page notice a button press (e.g. stop) without delay
-            clock.caption(f"⏱️ {int(time.time() - job['started'])} שניות")
+            quiet = time.time() - last_event
+            clock.caption(f"⏱️ {int(time.time() - job['started'])} שניות"
+                          + (" · ✍️ הסוכן כותב או חושב, השלב הזה יכול לקחת כדקה…" if quiet > 15 else ""))
             done = job["done"]                           # read first: every event is in before done
             for kind, msg in job["events"][shown:]:
                 st.write(f"{ICONS.get(kind, '•')} {msg}")
+            if len(job["events"]) > shown:
+                last_event = time.time()
             shown = len(job["events"])
             if done:
                 break
@@ -314,3 +348,6 @@ if r:
 5. **הגבלות:** תקרת עלות לכל ריצה, מגבלה יומית לאתר כולו, ומספר מוגבל של שלבים לסוכן.
 6. **תיעוד:** כל בדיקה נשמרת במסד הנתונים עם המודל, הזמן והעלות.
 """)
+
+if code_version():
+    st.caption(f"גרסה {code_version()}")
