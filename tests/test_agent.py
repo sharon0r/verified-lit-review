@@ -350,3 +350,15 @@ def test_finding_number_on_another_page_than_cited_is_sent_back_with_the_reason(
     ok = agent.fix_report([{"field": "bullet", "paper_id": pid, "index": 0, "page": 1,
                             "text": "Readmission fell from 18.2% to 12.5%."}])
     assert ok["accepted"] is True and agent.final[0]["bullets"][0]["pages"] == [1]
+
+
+def test_effect_verb_on_a_non_significant_result_is_sent_back(setup):
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    r = agent.submit_report([article(pid, [{"page": 1, "text": GOOD}])],
+                            conclusion="Calls reduced readmission (RR 0.81, 95% CI 0.65 to 1.01).")
+    assert r["accepted"] is False and "conclusion" in r["effect_claimed_on_non_significant_result"][0]
+    ok = agent.fix_report([{"field": "conclusion", "paper_id": "", "index": 0, "page": 0,
+                            "text": "Calls did not significantly reduce readmission."}])
+    assert ok["accepted"] is True

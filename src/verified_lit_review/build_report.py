@@ -53,6 +53,8 @@ LABELS = {
                numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא עברו בדיקה",
                r_not_in_paper="לא מופיע במאמר", r_not_on_page="לא בעמוד שצוין",
                r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
+               direction_warning=("**בדיקה אוטומטית:** בחלק מהמאמרים יש תוצאות מובהקות בכיוונים הפוכים, "
+                                  "והמסקנה לא מציינת זאת. כדאי לבדוק את הממצאים מול המסקנה."),
                no_numbers="אין מספרים לבדיקה",
                conclusion_numbers="מספרים במסקנה שנבדקו מול הממצאים המאומתים", not_traced="לא מופיעים בממצאים",
                findings="עיקרי הממצאים", relevance="רלוונטיות והסתייגויות", quotes="ציטוטים מתוך המאמר",
@@ -77,6 +79,9 @@ LABELS = {
                numbers="Numbers checked against the paper", found="found", not_found="failed the check",
                r_not_in_paper="not in the paper", r_not_on_page="not on the cited page",
                r_sign="sign differs from the paper", r_ci_apart="estimate and interval not printed together",
+               direction_warning=("**Automatic check:** some papers report significant results in opposite "
+                                  "directions, and the conclusion does not say so. Check the findings against "
+                                  "the conclusion."),
                no_numbers="no numbers to check",
                conclusion_numbers="Numbers in the conclusion checked against the verified findings",
                not_traced="not in the findings",
@@ -204,6 +209,8 @@ def build_report(spec, pdf_dir, out):
         md += [f"## {L['conclusion']}", "", spec["conclusion"], ""]
         if spec.get("conclusion_numbers") is not None:
             md += [number_line(L, spec["conclusion_numbers"], "conclusion_numbers", "not_traced"), ""]
+        if spec.get("direction_warning"):
+            md += [f"> ⚠️ {L['direction_warning']}", ""]
     if spec.get("certainty"):
         md += [f"**{L['certainty']}:** {spec['certainty']}", ""]
     md += [f"## {L['papers']}", ""]
