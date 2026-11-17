@@ -16,3 +16,11 @@ __pycache__/
 # Streamlit secrets (API key, password) - never commit
 .streamlit/secrets.toml
 output/
+
+# videos and audio (demo recordings live outside the repo, in C:\AIideos)
+*.mp4
+*.webm
+*.mp3
+
+# personal interview notes
+explain_project.md
