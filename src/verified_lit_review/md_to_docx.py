@@ -18,7 +18,8 @@ HEB = re.compile(r"[֐-׿]")
 LATIN_FONT, HEB_FONT = "Times New Roman", "David"
 # link text may contain escaped brackets ("\[CARE\]"); a URL may contain one level of balanced
 # parentheses, as Elsevier DOIs do ("10.1016/S0140-6736(20)30183-5")
-INLINE = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*|\[((?:\\.|[^\]\\])+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)")
+INLINE = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*|\[((?:\\.|[^\]\\])+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)"
+                    r"|(?<!\w)_(?=\S)(.+?)(?<=\S)_(?!\w)")       # _italic_ (not snake_case words)
 UNESCAPE = re.compile(r"\\([\\\[\]|])")
 
 doc = Document()
@@ -122,8 +123,8 @@ def add_inline(p, text, bold=False, italic=False):
             mark_run(p.add_run(seg), seg, bold, italic)
         if m.group(1) is not None:
             add_inline(p, m.group(1), True, italic)
-        elif m.group(2) is not None:
-            add_inline(p, m.group(2), bold, True)
+        elif m.group(2) is not None or m.group(5) is not None:
+            add_inline(p, m.group(2) if m.group(2) is not None else m.group(5), bold, True)
         else:
             add_link(p, UNESCAPE.sub(r"\1", m.group(3)), m.group(4))
         pos = m.end()

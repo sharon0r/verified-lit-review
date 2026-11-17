@@ -24,3 +24,13 @@ def test_brackets_pipes_and_parenthesized_doi_become_a_clean_hyperlink(tmp_path)
     assert texts and all("[The CARE | trial] of x" in t and "](" not in t and "\\" not in t for t in texts)
     assert urls == ["https://doi.org/10.1016/S0140-6736(20)30183-5"]    # Word reuses one relationship
     assert d.element.xml.count("<w:hyperlink") == 2                    # for both links
+
+
+def test_underscore_italics_lose_their_underscores_but_snake_case_stays(tmp_path):
+    md = tmp_path / "r.md"
+    md.write_text("_מספרים שנבדקו מול המאמר: 2/2 נמצאו_ ✅\n\nfile_name_v2.pdf\n", encoding="utf-8")
+    out = tmp_path / "r.docx"
+    subprocess.run([sys.executable, "-I", SCRIPT, str(md), str(out)], check=True, capture_output=True)
+    paras = [p for p in docx.Document(str(out)).paragraphs if p.text.strip()]
+    assert paras[0].text == "מספרים שנבדקו מול המאמר: 2/2 נמצאו ✅" and paras[0].runs[0].italic
+    assert paras[1].text == "file_name_v2.pdf"

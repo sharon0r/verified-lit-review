@@ -67,6 +67,30 @@ def test_invented_author_name_is_caught_and_real_one_passes(setup):
     assert agent._name_check(arts, "Doe ועמיתיו מצאו ירידה.") == []
 
 
+def test_unread_important_paper_is_listed_with_link_and_no_results(setup):
+    """A key paper that could not be downloaded is listed (title, link, why) - never its results."""
+    store, pid, tmp = setup
+    other = store.upsert_paper({"doi": "10.1/big", "title": "Postdischarge contacts: a meta-analysis",
+                                "source": "test", "authors": "Boggan J, Roe K", "year": "2025"})
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    arts = [article(pid, [{"page": 1, "text": GOOD}])]
+    sent_back = agent.submit_report(arts, not_read=[{"paper_id": other,
+                                                     "why_important": "It found a 21% reduction."}])
+    assert sent_back["accepted"] is False and sent_back["not_read_with_numbers"] == [other]
+    ok = agent.submit_report(arts, not_read=[
+        {"paper_id": other, "why_important": "The newest meta-analysis of randomized trials (2025)."},
+        {"paper_id": "10.9/invented", "why_important": "Not from the searches."}])
+    assert ok["accepted"] is True
+    out = tmp / "r.md"
+    agent._write_report(store.start_run("q", "m"), "q", "he", str(out), 1.0)
+    md = out.read_text(encoding="utf-8")
+    assert "מאמרים חשובים שלא ניתן היה לפתוח" in md
+    assert "[Postdischarge contacts: a meta-analysis](https://doi.org/10.1/big) (Boggan J et al., 2025)" in md
+    assert "— **למה חשוב:** The newest meta-analysis of randomized trials (2025)." in md
+    assert "invented" not in md and "21%" not in md
+
+
 def test_search_budget_ends_the_search_phase(setup, monkeypatch):
     """After MAX_SEARCH_TURNS turns with searches, search_papers refuses instead of searching again."""
     from verified_lit_review import agent as agent_mod

@@ -63,6 +63,9 @@ LABELS = {
                certainty="ודאות הראיות (בסגנון GRADE, הערכה משוערת)",
                scope=("> **היקף:** {n} מאמרים בגישה פתוחה שבחר סוכן AI מתוך תוצאות החיפוש. זו סקירה ראשונית "
                       "ולא סקירה שיטתית: מאמרים שאינם בגישה פתוחה, וחלק מהסקירות המרכזיות בתחום, עשויים להיות חסרים."),
+               not_read="מאמרים חשובים שלא ניתן היה לפתוח",
+               not_read_note="_נמצאו בחיפוש אך לא הורדו (אין גישה פתוחה להורדה). לא נלקחו מהם ממצאים. מומלץ לקרוא בקישור._",
+               why_important="למה חשוב",
                summary="**סיכום אימות:** {ok} ציטוטים אומתו ונכללו; {bad} נדחו והוסרו."),
     "en": dict(title="Literature Review Report", count="{} articles", question="Research question", table="Summary of articles",
                cols=["#", "Topic", "Title", "Authors", "Year", "Source"], article="Title",
@@ -84,6 +87,9 @@ LABELS = {
                scope=("> **Scope:** {n} open-access papers chosen by an AI agent from the search results. This is a "
                       "rapid first look, not a systematic review: papers that are not open access, and some key "
                       "reviews in the field, may be missing."),
+               not_read="Important papers that could not be opened",
+               not_read_note="_Found in the search but not downloadable. No findings were taken from them; read them at the link._",
+               why_important="Why it matters",
                summary="**Verification summary:** {ok} quotes verified and included; {bad} rejected and removed."),
 }
 
@@ -164,6 +170,14 @@ def build_report(spec, pdf_dir, out):
                   [i, a.get("topic", ""), linked_title(a), a.get("authors", ""), a.get("year", ""),
                    a.get("journal", "")]) + " |")
     md.append("")
+    if spec.get("not_read"):
+        md += [f"## {L['not_read']}", "", L["not_read_note"], ""]
+        for n in spec["not_read"]:
+            first = (str(n.get("authors") or "").split(",")[0]).strip()
+            who = ", ".join(x for x in [f"{first} et al." if first else "", str(n.get("year") or "")] if x)
+            md.append(f"- {linked_title(n)}" + (f" ({who})" if who else "")
+                      + f" — **{L['why_important']}:** {n['why_important']}")
+        md.append("")
 
     ok_n, rejected = 0, []
     for i, a in enumerate(arts, 1):

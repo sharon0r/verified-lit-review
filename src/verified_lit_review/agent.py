@@ -64,6 +64,13 @@ ARTICLE = _schema({
     "relevance": {"type": "string", "description": "how it answers the question + its limits"},
     "quotes": {"type": "array", "items": QUOTE},
 })
+NOT_READ = _schema({
+    "paper_id": {"type": "string"},
+    "why_important": {"type": "string",
+                      "description": "one short sentence: why a reader should open this paper (its design and "
+                                     "scope), with no results, numbers or direction of effect"},
+})
+MAX_NOT_READ = 3
 
 TOOLS = [
     {"name": "search_papers", "strict": True,
@@ -99,7 +106,10 @@ TOOLS = [
                         "description": "3-5 sentences answering the research question across all papers: "
                                        "the overall direction, how strong and consistent the evidence is, "
                                        "and the main gaps"},
-         "articles": {"type": "array", "items": ARTICLE}})},
+         "articles": {"type": "array", "items": ARTICLE},
+         "not_read": {"type": "array", "items": NOT_READ,
+                      "description": "up to 3 important papers from the search results that could not be "
+                                     "downloaded; empty if none"}})},
 ]
 
 
@@ -216,8 +226,22 @@ class Agent:
         ok, found, reason = self._check(paper_id, int(page), text)
         return {"verified": ok, "found_on_pages": found, "reason": reason}
 
-    def submit_report(self, articles, conclusion="", pico="", certainty=""):
+    def _not_read_check(self, not_read, articles):
+        """Keep listed unread papers that came from the searches; refuse results in their sentence."""
+        chosen = {a["paper_id"] for a in articles}
+        kept, problems = [], []
+        for item in (not_read or [])[:MAX_NOT_READ]:
+            pid, why = item.get("paper_id", ""), " ".join((item.get("why_important") or "").split())
+            if pid in chosen or not self.store.get_paper(pid):
+                continue                     # unknown id or a paper that is in the report anyway
+            if re.search(r"\d", re.sub(r"\b(?:19|20)\d\d\b", "", why)):
+                problems.append(pid)         # a number = a result taken from an unread abstract
+            kept.append({"paper_id": pid, "why_important": why})
+        return kept, problems
+
+    def submit_report(self, articles, conclusion="", pico="", certainty="", not_read=None):
         self.conclusion, self.pico, self.certainty = conclusion, pico, certainty
+        self.not_read, not_read_numbers = self._not_read_check(not_read, articles)
         if not articles:
             return {"error": "submit at least one paper; if none can answer the question, say so in a "
                              "paper's relevance field instead of submitting nothing"}
@@ -243,7 +267,7 @@ class Agent:
         bad_names = self._name_check(articles, conclusion)
         total = sum(len(a["quotes"]) for a in articles)
         n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
-        retry = (failures or number_warnings or bad_names) and self.submissions < MAX_SUBMITS
+        retry = (failures or number_warnings or bad_names or not_read_numbers) and self.submissions < MAX_SUBMITS
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
                       + (f", {n_bad} number(s) not found in the papers" if n_bad else "")
                       + (f", author name(s) not in any paper: {', '.join(bad_names)}" if bad_names else "")
@@ -251,12 +275,13 @@ class Agent:
         self.final = articles
         if retry:
             return {"accepted": False, "failures": failures, "number_warnings": number_warnings,
-                    "author_names_not_found": bad_names,
+                    "author_names_not_found": bad_names, "not_read_with_numbers": not_read_numbers,
                     "instruction": "Fix or remove these quotes (copy exactly from retrieved pages). For numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
                                    "never compute new numbers. A number in the conclusion must also appear in "
                                    "a finding or quote of the paper it comes from. Author names not found: use "
-                                   "the first author exactly as the search results list it. Then submit again."}
+                                   "the first author exactly as the search results list it. not_read papers: "
+                                   "say only why they matter, with no numbers or results. Then submit again."}
         self.done = True
         return {"accepted": True, "note": "unverified quotes, if any, will be left out of the report"}
 
@@ -356,7 +381,12 @@ class Agent:
                 "conclusion": getattr(self, "conclusion", ""), "pico": getattr(self, "pico", ""),
                 "conclusion_numbers": dict(zip(("verified", "unverified"),
                                                self._conclusion_check(self.final, getattr(self, "conclusion", "")))),
-                "certainty": getattr(self, "certainty", "")}
+                "certainty": getattr(self, "certainty", ""),
+                "not_read": [{"title": p["title"], "authors": p.get("authors"), "year": p.get("year"),
+                              "journal": p.get("journal"), "doi": p.get("doi"), "pmcid": p.get("pmcid"),
+                              "url": p.get("url"), "why_important": n["why_important"]}
+                             for n in getattr(self, "not_read", []) for p in [self.store.get_paper(n["paper_id"])]
+                             if p]}
         ok_n, rejected = build_report(spec, "", out_path)          # independent re-check on the PDFs
         cost = self.cost()
         self.store.finish_run(run_id, out_path, cost_usd=cost, served_model=self._served())
