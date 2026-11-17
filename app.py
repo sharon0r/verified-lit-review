@@ -102,10 +102,16 @@ def runs_text(n):
     return "ריצה אחת" if n == 1 else f"{n} ריצות"
 
 MAX_QUESTION_CHECKS = 5    # per browser session; each check is one short model call (about a cent)
-AUTHOR = ("נבנה על ידי **שרון וייסברג (Sharon Weissberg)** · "
-          "[LinkedIn](https://www.linkedin.com/in/sharon-weissberg-82596911) · "
-          "[GitHub](https://github.com/sharon0r/verified-lit-review) · "
-          "[sharonor.we@gmail.com](mailto:sharonor.we@gmail.com)")
+EMAIL = "sharonor.we@gmail.com"
+LINKEDIN = "https://www.linkedin.com/in/sharon-weissberg-82596911"
+GITHUB = "https://github.com/sharon0r/verified-lit-review"
+# a visitor whose run failed can write straight to the author, with the subject filled in
+REPORT_PROBLEM = (f"mailto:{EMAIL}?subject=%D7%91%D7%A2%D7%99%D7%94%20%D7%91%D7%90%D7%AA%D7%A8%20"
+                  "%D7%A1%D7%A7%D7%99%D7%A8%D7%AA%20%D7%94%D7%A1%D7%A4%D7%A8%D7%95%D7%AA")   # "בעיה באתר סקירת הספרות"
+# on the main page (phones hide the sidebar behind a menu), one short centered line
+AUTHOR = (f'<div style="text-align:center">נבנה על ידי <b>שרון וייסברג</b> · '
+          f'<a href="mailto:{EMAIL}">{EMAIL}</a> · <a href="{GITHUB}">GitHub</a> · '
+          f'<a href="{LINKEDIN}">LinkedIn</a></div>')
 # One model only: in a review by an AI physician agent, Opus scored 7-9/10 on the same question,
 # Haiku 6 and Sonnet 5 (see docs/EVALUATION.md), so visitors are not offered the cheaper models.
 MODEL = "claude-opus-5-5"
@@ -136,10 +142,15 @@ with st.sidebar:
         for r in service.list_runs(8):
             st.caption(f"#{r['run_id']} · {r['verified']}/{r['quotes']} ✅ · {r['question'][:55]}")
     st.divider()
-    st.markdown(AUTHOR)
+    st.markdown(f"**שרון וייסברג (Sharon Weissberg)**  \n"
+                f"✉️ [{EMAIL}](mailto:{EMAIL})  \n"
+                f"💻 [GitHub]({GITHUB})  \n"
+                f"🔗 [LinkedIn]({LINKEDIN})")
+    st.markdown(f"🛟 [נתקלתם בבעיה? כתבו לי]({REPORT_PROBLEM})")
 
 # ------------------------------------------------------------------ main
 st.markdown('<div class="app-title">📚 סקירת ספרות עם ציטוטים מאומתים</div>', unsafe_allow_html=True)
+st.markdown(AUTHOR, unsafe_allow_html=True)
 st.markdown("הזינו שאלת מחקר בכל תחום, וסוכן AI יכין תוך כמה דקות סקירת ספרות ראשונית מתוך עד חמישה "
             "מאמרים בגישה פתוחה, ויעדיף סקירות שיטתיות וניסויים אקראיים. "
             "**כל ציטוט מאומת אוטומטית מול ה-PDF המקורי.**")
@@ -310,7 +321,8 @@ if job is not None and st.session_state.get("result_job") != token:
         st.session_state.result, st.session_state.result_job = job["result"], token
         st.rerun()                                       # refresh the counters above for the new state
     run_failed = True
-    st.query_params.pop("job", None)                     # a failed run is shown once, not on every rerun
+    st.markdown(f"🛟 [נתקלתם בבעיה? כתבו לי]({REPORT_PROBLEM})")
+    st.query_params.pop("job", None)                    # a failed run is shown once, not on every rerun
 
 r = st.session_state.get("result")
 if not r and not can_run:      # the ready example only when the visitor cannot run a review
