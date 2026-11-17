@@ -17,7 +17,7 @@ import time
 import streamlit as st
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
-from verified_lit_review import service  # noqa: E402
+from verified_lit_review import scope, service  # noqa: E402
 
 # Streamlit Cloud keeps secrets in st.secrets; copy them to the environment the agent reads.
 try:
@@ -64,11 +64,7 @@ def service_unavailable(error):
 def runs_text(n):
     return "ריצה אחת" if n == 1 else f"{n} ריצות"
 
-EXAMPLES = {  # short Hebrew label -> the question sent to the agent
-    "🏥 מעקב טלפוני אחרי שחרור": "Does telephone follow-up after hospital discharge reduce readmissions?",
-    "🎓 משוב לתלמידים": "Does formative assessment with feedback improve student achievement?",
-    "💼 עבודה מרחוק": "Does remote work affect employee productivity?",
-}
+MAX_QUESTION_CHECKS = 5    # per browser session; each check is one short model call (about a cent)
 AUTHOR = ("נבנה על ידי **שרון וייסברג (Sharon Weissberg)** · "
           "[LinkedIn](https://www.linkedin.com/in/sharon-weissberg-82596911) · "
           "[GitHub](https://github.com/sharon0r/verified-lit-review) · "
@@ -112,15 +108,9 @@ st.markdown("הזינו שאלת מחקר בכל תחום, וסוכן AI יפי�
             "ומאתר בכל מאמר את הקטעים הרלוונטיים לשאלה באמצעות דירוג לפי שכיחות מונחים (BM25). "
             "**הסקירה נכתבת מתוך קטעים אלה בלבד (RAG), וכל ציטוט בה מאומת אוטומטית מול נוסח המאמר המקורי.**")
 
-if "question" not in st.session_state:
-    st.session_state.question = next(iter(EXAMPLES.values()))
-st.caption("דוגמאות לשאלות מחקר:")
-cols = st.columns(len(EXAMPLES))
-for col, (label, ex) in zip(cols, EXAMPLES.items()):
-    if col.button(label, use_container_width=True):
-        st.session_state.question = ex
 question = st.text_area("שאלת מחקר (באנגלית או בעברית)", key="question", height=80,
-                        max_chars=service.MAX_QUESTION_CHARS)
+                        max_chars=service.MAX_QUESTION_CHARS,
+                        placeholder="למשל: Does telephone follow-up after hospital discharge reduce readmissions?")
 # the settings sit next to the question, not in the sidebar, which phones hide behind a menu
 _lang_col, _n_col = st.columns(2)
 language = _lang_col.radio("שפת הדו\"ח", ["he", "en"], format_func={"he": "עברית", "en": "English"}.get,
@@ -228,13 +218,43 @@ if token and job is None:
     if not st.session_state.get("result"):
         st.info("הריצה הקודמת נקטעה כי האפליקציה הופעלה מחדש. אפשר להריץ שוב.")
 run_failed = False
-if (job is None or job["done"]) and can_run and st.button("▶️ התחילו סקירה", type="primary"):
+
+
+def begin(q):
+    """Start the paid review in the background and remember its token in the URL."""
     if service.runs_since(time.time() - 86400) >= DAILY_RUN_LIMIT:   # re-check right before spending
         st.warning("הריצות של היום נוצלו.")
         st.stop()
-    token = service.start_job(question, n_papers, language, model=MODEL)
-    st.query_params["job"] = token
-    job = service.get_job(token)
+    st.session_state.pop("scope", None)
+    t = service.start_job(q, n_papers, language, model=MODEL)
+    st.query_params["job"] = t
+    return t
+
+
+if (job is None or job["done"]) and can_run:
+    sc = st.session_state.get("scope")
+    if sc and sc["question"] == question:
+        # the question was too broad: offer focused versions, or the user's own question as it is
+        st.info(f"🔎 **השאלה רחבה מדי לסקירה של כמה מאמרים.** {sc['reason']}")
+        own = f"השאלה שלי, כפי שהיא: {question}"
+        choice = st.radio("בחרו שאלה:", sc["options"] + [own])
+        if st.button("▶️ התחילו סקירה עם השאלה שנבחרה", type="primary"):
+            token = begin(question if choice == own else choice)
+            job = service.get_job(token)
+    elif st.button("▶️ התחילו סקירה", type="primary"):
+        checked = None
+        if question.strip() and st.session_state.get("checks", 0) < MAX_QUESTION_CHECKS:
+            st.session_state.checks = st.session_state.get("checks", 0) + 1
+            try:
+                with st.spinner("בודקים שהשאלה ממוקדת…"):
+                    checked = scope.check_question(question)
+            except Exception:  # noqa: BLE001 - the check helps; it never blocks a review
+                checked = None
+        if checked and not checked["focused"]:
+            st.session_state.scope = {**checked, "question": question}
+            st.rerun()
+        token = begin(question)
+        job = service.get_job(token)
 if job is not None and st.session_state.get("result_job") != token:
     # pressing the button reruns the page; the run itself stops before its next model call
     if not job["done"] and st.button("⏹️ עצרו את הריצה"):
@@ -252,7 +272,7 @@ if job is not None and st.session_state.get("result_job") != token:
     st.query_params.pop("job", None)                     # a failed run is shown once, not on every rerun
 
 r = st.session_state.get("result")
-if not r and not run_failed:   # the example never stands in for a visitor's own (failed) run
+if not r and not can_run:      # the ready example only when the visitor cannot run a review
     show_demo()
 if r:
     total = r["verified"] + len(r["rejected"])
