@@ -53,6 +53,8 @@ LABELS = {
                numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא עברו בדיקה",
                r_not_in_paper="לא מופיע במאמר", r_not_on_page="לא בעמוד שצוין",
                r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
+               start_high="רמת הפתיחה, שנקבעה בקוד לפי סוגי המחקרים: גבוהה (יש ניסויים אקראיים). כל הורדה מנומקת.",
+               start_low="רמת הפתיחה, שנקבעה בקוד לפי סוגי המחקרים: נמוכה (מחקרים תצפיתיים בלבד).",
                auto_review="סקירה שיטתית או מטה-אנליזה שהסוכן בחר לקרוא, אך לא הייתה בגישה פתוחה.",
                auto_trial="ניסוי אקראי שהסוכן בחר לקרוא, אך לא היה בגישה פתוחה.",
                missing_strong=("**חסרים מחקרים חזקים:** {failed} מתוך {total} המחקרים החזקים שהסוכן ניסה לפתוח "
@@ -84,6 +86,8 @@ LABELS = {
                numbers="Numbers checked against the paper", found="found", not_found="failed the check",
                r_not_in_paper="not in the paper", r_not_on_page="not on the cited page",
                r_sign="sign differs from the paper", r_ci_apart="estimate and interval not printed together",
+               start_high="Starting level, set in code from the study designs: high (randomized trials). Every step down is explained.",
+               start_low="Starting level, set in code from the study designs: low (observational studies only).",
                auto_review="A systematic review or meta-analysis the agent chose to read, but it was not open access.",
                auto_trial="A randomized trial the agent chose to read, but it was not open access.",
                missing_strong=("**Strong studies missing:** {failed} of the {total} strongest studies the agent "
@@ -223,6 +227,8 @@ def build_report(spec, pdf_dir, out):
             md += [f"> ⚠️ {L['direction_warning']}", ""]
     if spec.get("certainty"):
         md += [f"**{L['certainty']}:** {spec['certainty']}", ""]
+        if spec.get("certainty_start") in ("high", "low"):
+            md += [f"_{L['start_' + spec['certainty_start']]}_", ""]
     failed, read = (spec.get("missing_strong") or [0, 0])
     if failed > read:
         md += [f"> ⚠️ {L['missing_strong'].format(failed=failed, total=failed + read)}", ""]

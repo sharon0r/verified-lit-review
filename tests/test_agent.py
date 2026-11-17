@@ -391,7 +391,8 @@ def test_report_explains_an_automatically_listed_study_and_warns_when_most_stron
                                    "year": "2019"})
     art = article(pid, [{"page": 1, "text": GOOD}])
     client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)),
-                         reply(tool_call("submit_report", articles=[art], certainty="Low, provisional.",
+                         reply(tool_call("submit_report", articles=[art],
+                                         certainty="Low, provisional: risk of bias and imprecision.",
                                          conclusion="", pico="", bottom_line="", not_read=[]))])
     agent = Agent(store, str(tmp), client=client)
     agent.failed = [cochrane]
@@ -399,3 +400,15 @@ def test_report_explains_an_automatically_listed_study_and_warns_when_most_stron
     report = (tmp / "r.md").read_text(encoding="utf-8")
     assert "A systematic review or meta-analysis the agent chose to read, but it was not open access." in report
     assert "Strong studies missing:** 1 of the 1 strongest" in report
+
+
+def test_certainty_two_levels_down_with_one_reason_is_sent_back(setup):
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    art = {**article(pid, [{"page": 1, "text": GOOD}]), "study_type": "randomized controlled trial, n=240"}
+    r = agent.submit_report([art], certainty="Low: risk of bias.")
+    assert r["accepted"] is False and "only 1 reason" in r["certainty_rating"] and agent.certainty_start == "high"
+    ok = agent.fix_report([{"field": "certainty", "paper_id": "", "index": 0, "page": 0,
+                            "text": "Low: risk of bias (no blinding) and imprecision (a single small trial)."}])
+    assert ok["accepted"] is True

@@ -18,7 +18,7 @@ import os
 import re
 import time
 
-from . import claims, numbers
+from . import claims, grade, numbers
 from .build_report import MIN_QUOTE_CHARS, build_report, norm
 from .db import Store, paper_key
 from .fetch import fetch_paper
@@ -436,6 +436,10 @@ class Agent:
         too_long = (self._length_check(conclusion, bottom_line)
                     + self._certainty_verb_check(certainty, conclusion, bottom_line))
         provisional = self._provisional_check(certainty)
+        # GRADE start from the designs in code; every level down (or up) must be explained
+        designs = [grade.design(f"{(self.store.get_paper(a['paper_id']) or {}).get('title', '')} "
+                                f"{a.get('study_type', '')}") for a in articles]
+        self.certainty_start, grade_problem = grade.check(certainty, designs)
         # an effect verb on a result whose interval includes no effect (enforced)
         places = [("bottom_line", bottom_line), ("conclusion", conclusion)]
         for a in articles:
@@ -449,7 +453,7 @@ class Agent:
         total = sum(len(a["quotes"]) for a in articles)
         n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
         retry = ((failures or number_warnings or bad_names or not_read_numbers or too_long or overclaimed
-                  or provisional) and self.submissions < MAX_SUBMITS)
+                  or provisional or grade_problem) and self.submissions < MAX_SUBMITS)
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
                       + (f", {n_bad} number(s) failed the check" if n_bad else "")
                       + (f", author name(s) not in any paper: {', '.join(bad_names)}" if bad_names else "")
@@ -457,13 +461,14 @@ class Agent:
                       + (f", {len(overclaimed)} effect claim(s) on a non-significant result" if overclaimed else "")
                       + (", warning: opposite directions not acknowledged" if self.direction_warnings else "")
                       + (", certainty must say provisional (most strong studies unread)" if provisional else "")
+                      + (", certainty rating not explained against its start" if grade_problem else "")
                       + (" - sent back to the agent for a quick fix" if retry else ""))
         self.final = articles
         if retry:
             return {"accepted": False, "failures": failures, "number_warnings": number_warnings,
                     "author_names_not_found": bad_names, "not_read_with_numbers": not_read_numbers,
                     "too_long": too_long, "effect_claimed_on_non_significant_result": overclaimed,
-                    "certainty_must_be_provisional": provisional,
+                    "certainty_must_be_provisional": provisional, "certainty_rating": grade_problem,
                     "instruction": "Call fix_report with edits for only these items; do not resubmit the whole "
                                    "report. Quotes: copy exactly from retrieved pages, or remove them. Numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
@@ -603,6 +608,7 @@ class Agent:
                                                self._conclusion_check(self.final, getattr(self, "conclusion", "")))),
                 "certainty": getattr(self, "certainty", ""),
                 "direction_warning": bool(getattr(self, "direction_warnings", [])),
+                "certainty_start": getattr(self, "certainty_start", None),
                 "bottom_line": getattr(self, "bottom_line", ""),
                 "not_read": [{"title": p["title"], "authors": p.get("authors"), "year": p.get("year"),
                               "journal": p.get("journal"), "doi": p.get("doi"), "pmcid": p.get("pmcid"),
