@@ -35,7 +35,12 @@ MAX_TURNS = 30
 class Cancelled(RuntimeError):
     """The user stopped the run (checked before each model call, so no further cost)."""
 MAX_COST_USD = float(os.environ.get("MAX_COST_PER_RUN", "1.00"))   # hard stop for one runaway run
-MAX_SUBMITS = 2
+MAX_SUBMITS = 2            # one send-back; fix_report makes it cheap (only the flagged items)
+# Opus 5.5 always thinks, and thinking counts against max_tokens. A cloud run hit a 16000 cap twice
+# while rewriting a 5-paper report (110 s each, nothing usable), so the limit is higher and streamed.
+MAX_OUTPUT_TOKENS = 48000
+CONCLUSION_MAX_WORDS = 130  # about 5 sentences; a physician reviewer found a 12-sentence, 25-number one
+BOTTOM_LINE_MAX_WORDS = 55
 PAGE_CHARS = 4000
 # Every turn re-sends the whole conversation, so turns cost both time and money. Measured runs spent
 # up to 10 turns searching again after failed downloads; the code now ends the search phase.
@@ -71,6 +76,15 @@ NOT_READ = _schema({
                                      "scope), with no results, numbers or direction of effect"},
 })
 MAX_NOT_READ = 3
+REPORT_FIELDS = ["bottom_line", "conclusion", "certainty", "pico"]
+ARTICLE_FIELDS = ["topic", "study_type", "why_chosen", "relevance"]
+EDIT = _schema({
+    "field": {"type": "string", "enum": REPORT_FIELDS + ARTICLE_FIELDS + ["bullet", "quote"]},
+    "paper_id": {"type": "string", "description": "the paper for article fields, bullet and quote; else empty"},
+    "index": {"type": "integer", "description": "bullet or quote position from 0; -1 adds a new one"},
+    "page": {"type": "integer", "description": "page of a quote; 0 otherwise"},
+    "text": {"type": "string", "description": "the new text; empty removes the bullet or quote"},
+})
 
 TOOLS = [
     {"name": "search_papers", "strict": True,
@@ -99,17 +113,25 @@ TOOLS = [
      "input_schema": _schema({
          "pico": {"type": "string",
                   "description": "the question as PICO: Population; Intervention/exposure; Comparison; Outcome"},
+         "bottom_line": {"type": "string",
+                         "description": "at most 2 short sentences shown first: the direction of the evidence, "
+                                        "its certainty, and the main caveat (e.g. papers study a different "
+                                        "intervention than the question)"},
          "certainty": {"type": "string",
                        "description": "GRADE-style certainty for the main outcome (high/moderate/low/very low) "
                                       "with one short reason per downgrade"},
          "conclusion": {"type": "string",
-                        "description": "3-5 sentences answering the research question across all papers: "
-                                       "the overall direction, how strong and consistent the evidence is, "
-                                       "and the main gaps"},
+                        "description": f"at most 5 sentences and {CONCLUSION_MAX_WORDS} words answering the "
+                                       "question across all papers: direction, strength and consistency, main "
+                                       "gaps; at most 4 key estimates (other numbers stay in the findings)"},
          "articles": {"type": "array", "items": ARTICLE},
          "not_read": {"type": "array", "items": NOT_READ,
                       "description": "up to 3 important papers from the search results that could not be "
                                      "downloaded; empty if none"}})},
+    {"name": "fix_report", "strict": True,
+     "description": "After a send-back: change only the flagged items of your last submission. The whole "
+                    "report is checked again, exactly as submit_report does. Much faster than resubmitting.",
+     "input_schema": _schema({"edits": {"type": "array", "items": EDIT}})},
 ]
 
 
@@ -239,8 +261,50 @@ class Agent:
             kept.append({"paper_id": pid, "why_important": why})
         return kept, problems
 
-    def submit_report(self, articles, conclusion="", pico="", certainty="", not_read=None):
-        self.conclusion, self.pico, self.certainty = conclusion, pico, certainty
+    def fix_report(self, edits):
+        """Apply small edits to the last submission and check the whole report again."""
+        last = getattr(self, "last_submission", None)
+        if not last:
+            return {"error": "nothing to fix yet: call submit_report first"}
+        rep = json.loads(json.dumps(last))                        # deep copy
+        by_id = {a["paper_id"]: a for a in rep["articles"]}
+        for e in edits:
+            f, text = e["field"], e["text"]
+            if f in REPORT_FIELDS:
+                rep[f] = text
+                continue
+            a = by_id.get(e["paper_id"])
+            if a is None:
+                return {"error": f"unknown paper_id {e['paper_id']!r}; use one from your submission"}
+            if f in ARTICLE_FIELDS:
+                a[f] = text
+                continue
+            items, i = (a["bullets"], e["index"]) if f == "bullet" else (a["quotes"], e["index"])
+            new = text if f == "bullet" else {"page": e["page"], "text": text}
+            if i == -1 and text:
+                items.append(new)
+            elif 0 <= i < len(items):
+                if text:
+                    items[i] = new
+                else:
+                    items.pop(i)
+            else:
+                return {"error": f"{f} index {i} is out of range for {e['paper_id']}"}
+        return self.submit_report(**rep)
+
+    def _length_check(self, conclusion, bottom_line):
+        long = []
+        if len(conclusion.split()) > CONCLUSION_MAX_WORDS:
+            long.append(f"conclusion has {len(conclusion.split())} words; at most {CONCLUSION_MAX_WORDS}, "
+                        "with at most 4 key estimates")
+        if len(bottom_line.split()) > BOTTOM_LINE_MAX_WORDS:
+            long.append(f"bottom_line must be 1-2 sentences, at most {BOTTOM_LINE_MAX_WORDS} words")
+        return long
+
+    def submit_report(self, articles, conclusion="", pico="", certainty="", not_read=None, bottom_line=""):
+        self.last_submission = {"articles": articles, "conclusion": conclusion, "pico": pico,
+                                "certainty": certainty, "not_read": not_read or [], "bottom_line": bottom_line}
+        self.conclusion, self.pico, self.certainty, self.bottom_line = conclusion, pico, certainty, bottom_line
         self.not_read, not_read_numbers = self._not_read_check(not_read, articles)
         if not articles:
             return {"error": "submit at least one paper; if none can answer the question, say so in a "
@@ -264,24 +328,29 @@ class Agent:
         _, bad_conclusion = self._conclusion_check(articles, conclusion)
         if bad_conclusion:
             number_warnings.append({"paper_id": "conclusion", "numbers_not_in_paper": bad_conclusion})
-        bad_names = self._name_check(articles, conclusion)
+        bad_names = self._name_check(articles, conclusion + " " + bottom_line)
+        too_long = self._length_check(conclusion, bottom_line)
         total = sum(len(a["quotes"]) for a in articles)
         n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
-        retry = (failures or number_warnings or bad_names or not_read_numbers) and self.submissions < MAX_SUBMITS
+        retry = ((failures or number_warnings or bad_names or not_read_numbers or too_long)
+                 and self.submissions < MAX_SUBMITS)
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
                       + (f", {n_bad} number(s) not found in the papers" if n_bad else "")
                       + (f", author name(s) not in any paper: {', '.join(bad_names)}" if bad_names else "")
-                      + (" - sent back to the agent to correct (about a minute)" if retry else ""))
+                      + (", text too long" if too_long else "")
+                      + (" - sent back to the agent for a quick fix" if retry else ""))
         self.final = articles
         if retry:
             return {"accepted": False, "failures": failures, "number_warnings": number_warnings,
                     "author_names_not_found": bad_names, "not_read_with_numbers": not_read_numbers,
-                    "instruction": "Fix or remove these quotes (copy exactly from retrieved pages). For numbers "
+                    "too_long": too_long,
+                    "instruction": "Call fix_report with edits for only these items; do not resubmit the whole "
+                                   "report. Quotes: copy exactly from retrieved pages, or remove them. Numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
                                    "never compute new numbers. A number in the conclusion must also appear in "
                                    "a finding or quote of the paper it comes from. Author names not found: use "
                                    "the first author exactly as the search results list it. not_read papers: "
-                                   "say only why they matter, with no numbers or results. Then submit again."}
+                                   "say only why they matter, with no numbers or results. Too long: shorten."}
         self.done = True
         return {"accepted": True, "note": "unverified quotes, if any, will be left out of the report"}
 
@@ -292,10 +361,20 @@ class Agent:
             return getattr(self, name)(**args)
         except (SourceError, ValueError) as e:
             return {"error": str(e)}
+        except (TypeError, KeyError) as e:   # e.g. arguments cut off at the output limit
+            return {"error": f"missing or incomplete arguments for {name} ({e}); send the call again"}
         except Exception as e:  # noqa: BLE001 - one failing tool call must not end the whole run
             return {"error": f"{type(e).__name__} in {name}; try another approach"}
 
     # ------------------------------------------------------------------ loop
+    def _create(self, **kw):
+        """One model call. Streamed, since a large max_tokens needs streaming in the SDK."""
+        api = self.client.beta.messages
+        if hasattr(api, "stream"):
+            with api.stream(**kw) as s:
+                return s.get_final_message()
+        return api.create(**kw)                    # test doubles
+
     def run(self, question, n_papers=3, language="he", out_path="Research_Summary_Report.md"):
         run_id = self.store.start_run(question, self.model)
         system = open(PROMPT, encoding="utf-8").read()
@@ -311,9 +390,9 @@ class Agent:
                 if self.should_stop():
                     raise Cancelled("stopped by the user")
                 t_model = time.time()
-                response = self.client.beta.messages.create(
-                    model=self.model, max_tokens=16000, system=system, tools=TOOLS, messages=messages,
-                    output_config={"effort": self.effort},
+                response = self._create(
+                    model=self.model, max_tokens=MAX_OUTPUT_TOKENS, system=system, tools=TOOLS,
+                    messages=messages, output_config={"effort": self.effort},
                     cache_control={"type": "ephemeral"},   # each turn re-sends the history: cache the prefix
                     betas=["server-side-fallback-2026-07-01"], fallbacks="default")
                 model_s = time.time() - t_model
@@ -328,6 +407,16 @@ class Agent:
                     raise RuntimeError(f"cost limit reached (${self.cost():.2f} > ${MAX_COST_USD:.2f} per run)")
                 messages.append({"role": "assistant", "content": response.content})
                 calls = [b for b in response.content if b.type == "tool_use"]
+                if response.stop_reason == "max_tokens":
+                    # the last tool call is cut off: never run it, say why, and ask for a smaller step
+                    note = ("Your reply was cut off at the output limit, so this call was not run. Send it "
+                            "again, shorter; after a send-back use fix_report with only the flagged items.")
+                    self.on_event("timing", f"turn {self.timing['turns']}: model {model_s:.0f}s - cut off at "
+                                  "the output limit, asked for a shorter reply")
+                    messages.append({"role": "user", "content": [
+                        {"type": "tool_result", "tool_use_id": c.id, "content": note, "is_error": True}
+                        for c in calls] or [{"type": "text", "text": note}]})
+                    continue
                 if not calls:
                     break
                 if any(c.name == "search_papers" for c in calls):
@@ -382,6 +471,7 @@ class Agent:
                 "conclusion_numbers": dict(zip(("verified", "unverified"),
                                                self._conclusion_check(self.final, getattr(self, "conclusion", "")))),
                 "certainty": getattr(self, "certainty", ""),
+                "bottom_line": getattr(self, "bottom_line", ""),
                 "not_read": [{"title": p["title"], "authors": p.get("authors"), "year": p.get("year"),
                               "journal": p.get("journal"), "doi": p.get("doi"), "pmcid": p.get("pmcid"),
                               "url": p.get("url"), "why_important": n["why_important"]}

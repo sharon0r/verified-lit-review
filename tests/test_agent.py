@@ -86,9 +86,51 @@ def test_unread_important_paper_is_listed_with_link_and_no_results(setup):
     agent._write_report(store.start_run("q", "m"), "q", "he", str(out), 1.0)
     md = out.read_text(encoding="utf-8")
     assert "מאמרים חשובים שלא ניתן היה לפתוח" in md
-    assert "[Postdischarge contacts: a meta-analysis](https://doi.org/10.1/big) (Boggan J et al., 2025)" in md
+    assert "[Postdischarge contacts: a meta-analysis](https://doi.org/10.1/big) (Boggan et al., 2025)" in md
     assert "— **למה חשוב:** The newest meta-analysis of randomized trials (2025)." in md
     assert "invented" not in md and "21%" not in md
+
+
+def test_send_back_is_fixed_with_small_edits_not_a_full_rewrite(setup):
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    bad = {**article(pid, [{"page": 1, "text": GOOD}, {"page": 1, "text": ALTERED}]),
+           "bullets": ["Readmission fell from 18.2% to 9.9%."]}
+    first = agent.submit_report([bad], conclusion="Mixed.", bottom_line="Calls may help.")
+    assert first["accepted"] is False and "fix_report" in first["instruction"]
+    ok = agent.fix_report([
+        {"field": "quote", "paper_id": pid, "index": 1, "page": 0, "text": ""},            # remove bad quote
+        {"field": "bullet", "paper_id": pid, "index": 0, "page": 0, "text": "Readmission fell to 18.2%."},
+        {"field": "bottom_line", "paper_id": "", "index": 0, "page": 0, "text": "Calls may reduce readmission."}])
+    assert ok["accepted"] is True
+    assert agent.final[0]["quotes"] == [{"page": 1, "text": GOOD}]
+    assert agent.bottom_line == "Calls may reduce readmission." and agent.conclusion == "Mixed."
+    assert "error" in agent.fix_report([{"field": "bullet", "paper_id": "nope", "index": 0, "page": 0, "text": "x"}])
+
+
+def test_too_long_conclusion_is_sent_back(setup):
+    from verified_lit_review import agent as agent_mod
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    long = "word " * (agent_mod.CONCLUSION_MAX_WORDS + 1)
+    r = agent.submit_report([article(pid, [{"page": 1, "text": GOOD}])], conclusion=long)
+    assert r["accepted"] is False and "conclusion has" in r["too_long"][0]
+
+
+def test_reply_cut_off_at_the_output_limit_is_not_run_and_the_model_is_told(setup):
+    store, pid, tmp = setup
+    cut = reply(tool_call("submit_report", articles=[{"paper_id": pid}]), stop="max_tokens")
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)), cut,
+                         reply(tool_call("submit_report", articles=[article(pid, [{"page": 1, "text": GOOD}])]))])
+    events = []
+    r = Agent(store, str(tmp), client=client, on_event=lambda k, m: events.append(m)).run(
+        "q", n_papers=1, out_path=str(tmp / "r.md"))
+    told = client.requests[2]["messages"][-1]["content"][0]
+    assert told["is_error"] and "cut off at the output limit" in told["content"]
+    assert any("output limit" in m for m in events) and r["verified"] == 1
+    assert client.requests[0]["max_tokens"] > 16000
 
 
 def test_search_budget_ends_the_search_phase(setup, monkeypatch):
@@ -210,8 +252,9 @@ def test_report_shows_database_route_and_why_chosen(setup):
     Agent(store, str(tmp), client=client).run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
     report = (tmp / "r.md").read_text(encoding="utf-8")
     assert "**Why chosen:** Largest randomized trial found." in report
-    assert "**Found in:** Europe PMC · downloaded via: PMC open-data (AWS)" in report
-    assert report.index("Mixed evidence.") < report.index("Summary of articles")   # conclusion first
+    assert "Found in" not in report and ".pdf" not in report        # no database, route or file name
+    assert report.index("Mixed evidence.") < report.index("Papers in this review")   # conclusion first
+    assert report.index("Papers in this review") < report.index("How this report was checked")
 
 
 def test_paper_titles_are_clickable_links(setup):
@@ -221,7 +264,7 @@ def test_paper_titles_are_clickable_links(setup):
     Agent(store, str(tmp), client=client).run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
     report = (tmp / "r.md").read_text(encoding="utf-8")
     link = "[Calls after discharge](https://doi.org/10.1/tel)"
-    assert f"| {link} |" in report and f"**Title:** {link}" in report     # summary table and article section
+    assert "— [Doe, 2024](https://doi.org/10.1/tel)" in report and f"**Title:** {link}" in report  # list + section
 
 
 def test_report_shows_pico_certainty_and_scope(setup):

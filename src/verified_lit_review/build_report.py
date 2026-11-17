@@ -63,6 +63,7 @@ LABELS = {
                certainty="ודאות הראיות (בסגנון GRADE, הערכה משוערת)",
                scope=("> **היקף:** {n} מאמרים בגישה פתוחה שבחר סוכן AI מתוך תוצאות החיפוש. זו סקירה ראשונית "
                       "ולא סקירה שיטתית: מאמרים שאינם בגישה פתוחה, וחלק מהסקירות המרכזיות בתחום, עשויים להיות חסרים."),
+               bottom_line="בשורה התחתונה", papers="המאמרים בסקירה", how="איך נבדק הדו\"ח",
                not_read="מאמרים חשובים שלא ניתן היה לפתוח",
                not_read_note="_נמצאו בחיפוש אך לא הורדו (אין גישה פתוחה להורדה). לא נלקחו מהם ממצאים. מומלץ לקרוא בקישור._",
                why_important="למה חשוב",
@@ -87,6 +88,7 @@ LABELS = {
                scope=("> **Scope:** {n} open-access papers chosen by an AI agent from the search results. This is a "
                       "rapid first look, not a systematic review: papers that are not open access, and some key "
                       "reviews in the field, may be missing."),
+               bottom_line="Bottom line", papers="Papers in this review", how="How this report was checked",
                not_read="Important papers that could not be opened",
                not_read_note="_Found in the search but not downloadable. No findings were taken from them; read them at the link._",
                why_important="Why it matters",
@@ -139,6 +141,23 @@ def linked_title(a):
     return f"[{title}]({url})" if url else title
 
 
+def short_cite(a):
+    """'Mekonnen et al., 2016' from 'Mekonnen AB, McLachlan AJ' or 'Lauren Dautzenberg, Lisa ...'."""
+    first = str(a.get("authors") or "").split(",")[0].strip().rstrip(".")
+    words = first.split()
+    if words:
+        # "Mekonnen AB" -> surname first; "Lauren Dautzenberg" -> surname last
+        name = words[0] if len(words) > 1 and re.fullmatch(r"[A-Z]{1,3}", words[-1]) else words[-1]
+        first = name + (" et al." if "," in str(a.get("authors")) else "")
+    return ", ".join(x for x in [first, str(a.get("year") or "")] if x)
+
+
+def cite_link(a):
+    cite = short_cite(a) or " ".join(str(a.get("title", "")).split()[:6])
+    url = paper_url(a)
+    return f"[{cite}]({url})" if url else cite
+
+
 def md_cell(text):
     return str(text).replace("|", "\\|").replace("\n", " ")
 
@@ -151,32 +170,28 @@ def build_report(spec, pdf_dir, out):
     L = LABELS.get(spec.get("language", "he"), LABELS["he"])
     arts = spec["articles"]
 
+    # The answer first, then the papers, and how it was checked at the end: a hospital reader on a
+    # phone should not scroll past metadata and caveats to find the bottom line (UX review).
     md = [f"# {L['title']} ({L['count'].format(len(arts))})", ""]
     if spec.get("question"):
         md += [f"**{L['question']}:** {spec['question']}", ""]
-    if spec.get("pico"):
-        md += [f"**PICO:** {spec['pico']}", ""]
-    md += [L["note"], "", L["scope"].format(n=len(arts)), ""]
-    if spec.get("conclusion"):                           # the answer first, the evidence after
+    if spec.get("bottom_line"):
+        md += [f"> **{L['bottom_line']}:** {spec['bottom_line']}", ""]
+    if spec.get("conclusion"):
         md += [f"## {L['conclusion']}", "", spec["conclusion"], ""]
         if spec.get("conclusion_numbers") is not None:
             md += [number_line(L, spec["conclusion_numbers"], "conclusion_numbers", "not_traced"), ""]
     if spec.get("certainty"):
         md += [f"**{L['certainty']}:** {spec['certainty']}", ""]
-    md += [f"## {L['table']}", "",
-           "| " + " | ".join(L["cols"]) + " |", "|" + "---|" * len(L["cols"])]
+    md += [f"## {L['papers']}", ""]
     for i, a in enumerate(arts, 1):
-        md.append("| " + " | ".join(md_cell(x) for x in
-                  [i, a.get("topic", ""), linked_title(a), a.get("authors", ""), a.get("year", ""),
-                   a.get("journal", "")]) + " |")
+        md.append(f"{i}. **{a.get('topic', '')}** — {cite_link(a)}"
+                  + (f" · {a['journal']}" if a.get("journal") else ""))
     md.append("")
     if spec.get("not_read"):
         md += [f"## {L['not_read']}", "", L["not_read_note"], ""]
         for n in spec["not_read"]:
-            first = (str(n.get("authors") or "").split(",")[0]).strip()
-            who = ", ".join(x for x in [f"{first} et al." if first else "", str(n.get("year") or "")] if x)
-            md.append(f"- {linked_title(n)}" + (f" ({who})" if who else "")
-                      + f" — **{L['why_important']}:** {n['why_important']}")
+            md.append(f"- {linked_title(n)} ({short_cite(n)}) — **{L['why_important']}:** {n['why_important']}")
         md.append("")
 
     ok_n, rejected = 0, []
@@ -187,19 +202,14 @@ def build_report(spec, pdf_dir, out):
         with pymupdf.open(path) as doc:
             pages = [norm(p.get_text()) for p in doc]
         off = int(a.get("page_offset") or 0)
+        source = " · ".join(str(x) for x in [short_cite(a), a.get("journal")] if x)
         md += [f"## {i}. {a.get('topic', a['title'])}", "",
-               f"**{L['article']}:** {linked_title(a)}  ", f"**{L['authors']}:** {a.get('authors', '')}  ",
-               f"**{L['source']}:** {a.get('journal', '')}  "]
+               f"**{L['article']}:** {linked_title(a)}  ", f"**{L['source']}:** {source}  "]
         if a.get("study_type"):
             md.append(f"**{L['type']}:** {a['study_type']}  ")
         if a.get("why_chosen"):
             md.append(f"**{L['why']}:** {a['why_chosen']}  ")
-        if a.get("database"):
-            route = f" · {L['route']}: {a['download_route']}" if a.get("download_route") else ""
-            md.append(f"**{L['database']}:** {a['database']}{route}  ")
-        if a.get("doi"):
-            md.append(f"**DOI:** [{a['doi']}](https://doi.org/{a['doi']})  ")
-        md += [f"**{L['file']}:** `{os.path.basename(a['file'])}`", "", f"### {L['findings']}", ""]  # no local paths
+        md += ["", f"### {L['findings']}", ""]
         md += [f"- {b}" for b in a.get("bullets", [])]
         if a.get("numbers") is not None:
             md += ["", number_line(L, a["numbers"])]
@@ -227,7 +237,10 @@ def build_report(spec, pdf_dir, out):
             md += ["_(—)_", ""]
         md += ["---", ""]
 
-    md.append(L["summary"].format(ok=ok_n, bad=len(rejected)))
+    md += [f"## {L['how']}", "", L["summary"].format(ok=ok_n, bad=len(rejected)), "",
+           L["note"], "", L["scope"].format(n=len(arts)), ""]
+    if spec.get("pico"):
+        md += [f"**PICO:** {spec['pico']}", ""]
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(md) + "\n")
     rej_path = os.path.splitext(out)[0] + ".rejected.json"

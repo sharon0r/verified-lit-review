@@ -276,12 +276,9 @@ if not r and not can_run:      # the ready example only when the visitor cannot 
     show_demo()
 if r:
     total = r["verified"] + len(r["rejected"])
-    c = st.columns(5)
-    c[0].metric("מאמרים", r["papers"])
-    c[1].metric("ציטוטים שאומתו", f"{r['verified']}/{total}")
-    c[2].metric("נדחו", len(r["rejected"]))
-    c[3].metric("עלות", f"${r['cost_usd']:.2f}")
-    c[4].metric("זמן", f"{r['seconds']:.0f}s")
+    # one line instead of five tiles, which stack into five tall rows on a phone
+    st.caption(f"📄 {r['papers']} מאמרים · ✅ {r['verified']}/{total} ציטוטים אומתו מול ה-PDF · "
+               f"⏱️ {r['seconds'] / 60:.1f} דק' · 💲{r['cost_usd']:.2f}")
 
     tab_report, tab_audit, tab_how = st.tabs(["📝 הדו\"ח", "🔎 תיעוד אימות (Audit trail)", "⚙️ איך זה עובד"])
     with tab_report:
