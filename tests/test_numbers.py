@@ -79,3 +79,15 @@ def test_estimate_and_interval_must_be_printed_together():
 def test_finding_without_pages_is_checked_against_the_whole_paper():
     index = idx(p1="n = 240", p2="RR 0.75 (0.60-0.94)")
     assert numbers.check_finding("RR 0.75 (0.60-0.94) in 240 patients", [], index)[1] == []
+
+
+def test_deliberate_errors_are_caught():
+    """The other side of 'no false alarms': broken versions of a correct finding must fail."""
+    index = idx(p1="Readmission: RR 0.75 (95% CI 0.60 to 0.94); mortality RR 0.85 (0.70 to 1.02).",
+                p2="Baseline characteristics were similar in both arms.")
+    assert numbers.check_finding("RR 0.75 (0.60 to 0.94)", [1], index)[1] == []          # correct
+    assert numbers.check_finding("RR -0.75 (0.60 to 0.94)", [1], index)[2][0][1] == "sign"
+    assert numbers.check_finding("RR 0.75 (0.60 to 0.94)", [2], index)[2][0][1] == "not_on_page"
+    assert numbers.check_finding("RR 0.76 (0.60 to 0.94)", [1], index)[2][0][1] == "not_in_paper"
+    # a real estimate paired with another result's interval: every number exists, the pairing is wrong
+    assert numbers.check_finding("RR 0.85 (0.60 to 0.94)", [1], index)[2][0][1] == "ci_apart"
