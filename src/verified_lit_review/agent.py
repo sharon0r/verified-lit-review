@@ -39,7 +39,7 @@ MAX_SUBMITS = 2            # one send-back; fix_report makes it cheap (only the 
 # Opus 5.5 always thinks, and thinking counts against max_tokens. A cloud run hit a 16000 cap twice
 # while rewriting a 5-paper report (110 s each, nothing usable), so the limit is higher and streamed.
 MAX_OUTPUT_TOKENS = 48000
-CONCLUSION_MAX_WORDS = 130  # about 5 sentences; a physician reviewer found a 12-sentence, 25-number one
+CONCLUSION_MAX_WORDS = 130  # about 5 sentences; an AI physician-reviewer agent found a 12-sentence, 25-number one
 BOTTOM_LINE_MAX_WORDS = 55
 PAGE_CHARS = 4000
 # Every turn re-sends the whole conversation, so turns cost both time and money. Measured runs spent
@@ -314,7 +314,7 @@ class Agent:
     @staticmethod
     def _certainty_verb_check(certainty, conclusion, bottom_line):
         """GRADE wording: 'probably reduces' belongs to moderate certainty. A cloud report rated the
-        evidence low and still wrote 'probably reduces' (כנראה מפחיתה) - a physician noticed at once."""
+        evidence low and still wrote 'probably reduces' (כנראה מפחיתה) - the AI physician-reviewer agent flagged it first."""
         # only the level the paragraph opens with: "moderate for X; low for VAP" is not low
         if not re.match(r"\W*(?:very low|low|נמוכה)", certainty.strip().lower()):
             return []
