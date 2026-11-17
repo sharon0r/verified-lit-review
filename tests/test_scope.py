@@ -1,4 +1,5 @@
 """Question check: a broad question gets focused options, a focused one goes straight on."""
+import json
 from types import SimpleNamespace as NS
 
 from verified_lit_review.scope import check_question
@@ -11,8 +12,8 @@ class FakeClient:
 
     def create(self, **kw):
         self.requests.append(kw)
-        return NS(content=[NS(type="tool_use", input=self.answer)],
-                  usage=NS(input_tokens=1000, output_tokens=200))
+        return NS(content=[NS(type="thinking", thinking=""), NS(type="text", text=json.dumps(self.answer))],
+                  stop_reason="end_turn", usage=NS(input_tokens=1000, output_tokens=200))
 
 
 def test_broad_question_returns_three_focused_options():
@@ -23,7 +24,8 @@ def test_broad_question_returns_three_focused_options():
     r = check_question("Is exercise good?", client=c)
     assert r["focused"] is False and len(r["options"]) == 3
     assert r["options"][1] == "Does exercise improve sleep in adults with insomnia?"
-    assert c.requests[0]["tool_choice"]["name"] == "assess_question"
+    assert c.requests[0]["output_config"]["format"]["type"] == "json_schema"
+    assert "tool_choice" not in c.requests[0]          # forced tool use is a 400 on this model
     assert "<question>Is exercise good?</question>" in c.requests[0]["messages"][0]["content"]
     assert 0 < r["cost_usd"] < 0.02
 
