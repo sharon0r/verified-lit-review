@@ -122,8 +122,9 @@ st.markdown("""<style>
   .stMarkdown p, .stMarkdown li, .stMarkdown td, .stMarkdown th, .stMarkdown h1, .stMarkdown h2,
   .stMarkdown h3 {unicode-bidi: plaintext; text-align: start;}
   [data-testid="stMetricValue"] {direction: ltr;}
-  /* less empty space above the page, so the question box is visible without scrolling */
-  .block-container {padding-top: 2rem !important;}
+  /* below Streamlit's top bar, which covered the title in a screen recording; the question box still
+     fits on the first screen */
+  .block-container {padding-top: 5rem !important;}
   .app-title {text-align: center; font-size: 1.6rem; font-weight: 700; margin: 0 0 .25rem 0;
                line-height: 1.3;}
 </style>""", unsafe_allow_html=True)
