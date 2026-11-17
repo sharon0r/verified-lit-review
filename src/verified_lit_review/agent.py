@@ -62,6 +62,22 @@ def _same_ids(value):
     return value
 
 
+SYNTHESIS = re.compile(r"systematic review|meta-?analys|cochrane|umbrella review", re.IGNORECASE)
+TRIAL = re.compile(r"randomi[sz]ed|\bRCT\b|controlled trial|cluster[- ]randomi", re.IGNORECASE)
+PROVISIONAL = re.compile(r"provisional|tentative|preliminary|זמני|זמנית|ראשוני|ראשונית", re.IGNORECASE)
+
+
+def strength(paper):
+    """'review' (systematic review, meta-analysis, Cochrane), 'trial' (randomized) or None, read from the
+    title, the journal and the Cochrane DOI prefix. The strongest designs whose absence matters most."""
+    text = f"{paper.get('title') or ''} {paper.get('journal') or ''}"
+    if SYNTHESIS.search(text) or (paper.get("doi") or "").startswith("10.1002/14651858"):
+        return "review"
+    if TRIAL.search(text):
+        return "trial"
+    return None
+
+
 def bullets_of(article):
     """The findings as {"text", "pages"}; a plain string (older callers, tests) cites no page."""
     return [b if isinstance(b, dict) else {"text": str(b), "pages": []} for b in article.get("bullets", [])]
@@ -165,6 +181,7 @@ class Agent:
         self.on_event = on_event or (lambda kind, msg: None)
         self.should_stop = should_stop or (lambda: False)   # checked before every paid model call
         self.fetched, self.submissions, self.final, self.done = set(), 0, None, False
+        self.failed = []           # papers the agent chose to fetch but no open PDF could be downloaded
         self.search_turns = 0
         self.author_words = set()  # every word of every author list the searches returned
         self.usage = {"input_tokens": 0, "output_tokens": 0,
@@ -203,6 +220,8 @@ class Agent:
         r = fetch_paper(paper, self.store, self.pdf_dir)
         self.on_event("fetch", f"{paper_id}: {r['status']}" + (f", {r['pages']} pages" if r.get("pages") else ""))
         if r["status"] == "failed":
+            if paper_id not in self.failed:
+                self.failed.append(paper_id)
             return {"status": "failed", "reason": "no open-access PDF could be downloaded; use a spare or "
                                                   "another candidate you already found"}
         self.fetched.add(paper_id)
@@ -302,7 +321,30 @@ class Agent:
             if re.search(r"\d", re.sub(r"\b(?:19|20)\d\d\b", "", why)):
                 problems.append(pid)         # a number = a result taken from an unread abstract
             kept.append({"paper_id": pid, "why_important": why})
+        # a strong study the agent wanted but could not open is always listed, even if the agent
+        # left it out: the reader must know the review rests on what was open, not on what was best
+        listed = {k["paper_id"] for k in kept}
+        for pid, kind in self._missing_strong()[0]:
+            if pid not in listed and pid not in chosen and len(kept) < MAX_NOT_READ + 2:
+                kept.append({"paper_id": pid, "why_important": "", "auto": kind})
         return kept, problems
+
+    def _missing_strong(self):
+        """([(paper_id, kind)] strong studies that failed to download, [paper_id] strong ones read)."""
+        failed = [(pid, k) for pid in self.failed if pid not in self.fetched
+                  for k in [strength(self.store.get_paper(pid) or {})] if k]
+        read = [pid for pid in self.fetched if strength(self.store.get_paper(pid) or {})]
+        return failed, read
+
+    def _provisional_check(self, certainty):
+        """When most strong studies the agent tried could not be opened, the certainty must say that
+        the rating is provisional. Returns the problem text or None."""
+        failed, read = self._missing_strong()
+        if len(failed) > len(read) and not PROVISIONAL.search(certainty or ""):
+            return (f"{len(failed)} of the {len(failed) + len(read)} strongest studies you tried (systematic "
+                    "reviews, meta-analyses, randomized trials) could not be opened: say in `certainty` that the "
+                    "rating is provisional (Hebrew: זמנית) because these studies were not read")
+        return None
 
     def fix_report(self, edits):
         """Apply small edits to the last submission and check the whole report again."""
@@ -393,6 +435,7 @@ class Agent:
         bad_names = self._name_check(articles, conclusion + " " + bottom_line)
         too_long = (self._length_check(conclusion, bottom_line)
                     + self._certainty_verb_check(certainty, conclusion, bottom_line))
+        provisional = self._provisional_check(certainty)
         # an effect verb on a result whose interval includes no effect (enforced)
         places = [("bottom_line", bottom_line), ("conclusion", conclusion)]
         for a in articles:
@@ -405,20 +448,22 @@ class Agent:
             f"{bottom_line} {conclusion}")
         total = sum(len(a["quotes"]) for a in articles)
         n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
-        retry = ((failures or number_warnings or bad_names or not_read_numbers or too_long or overclaimed)
-                 and self.submissions < MAX_SUBMITS)
+        retry = ((failures or number_warnings or bad_names or not_read_numbers or too_long or overclaimed
+                  or provisional) and self.submissions < MAX_SUBMITS)
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
                       + (f", {n_bad} number(s) failed the check" if n_bad else "")
                       + (f", author name(s) not in any paper: {', '.join(bad_names)}" if bad_names else "")
                       + (", text too long" if too_long else "")
                       + (f", {len(overclaimed)} effect claim(s) on a non-significant result" if overclaimed else "")
                       + (", warning: opposite directions not acknowledged" if self.direction_warnings else "")
+                      + (", certainty must say provisional (most strong studies unread)" if provisional else "")
                       + (" - sent back to the agent for a quick fix" if retry else ""))
         self.final = articles
         if retry:
             return {"accepted": False, "failures": failures, "number_warnings": number_warnings,
                     "author_names_not_found": bad_names, "not_read_with_numbers": not_read_numbers,
                     "too_long": too_long, "effect_claimed_on_non_significant_result": overclaimed,
+                    "certainty_must_be_provisional": provisional,
                     "instruction": "Call fix_report with edits for only these items; do not resubmit the whole "
                                    "report. Quotes: copy exactly from retrieved pages, or remove them. Numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
@@ -559,9 +604,10 @@ class Agent:
                 "bottom_line": getattr(self, "bottom_line", ""),
                 "not_read": [{"title": p["title"], "authors": p.get("authors"), "year": p.get("year"),
                               "journal": p.get("journal"), "doi": p.get("doi"), "pmcid": p.get("pmcid"),
-                              "url": p.get("url"), "why_important": n["why_important"]}
+                              "url": p.get("url"), "why_important": n["why_important"], "auto": n.get("auto")}
                              for n in getattr(self, "not_read", []) for p in [self.store.get_paper(n["paper_id"])]
-                             if p]}
+                             if p],
+                "missing_strong": [len(f) for f in self._missing_strong()]}
         ok_n, rejected = build_report(spec, "", out_path)          # independent re-check on the PDFs
         cost = self.cost()
         self.store.finish_run(run_id, out_path, cost_usd=cost, served_model=self._served())

@@ -362,3 +362,40 @@ def test_effect_verb_on_a_non_significant_result_is_sent_back(setup):
     ok = agent.fix_report([{"field": "conclusion", "paper_id": "", "index": 0, "page": 0,
                             "text": "Calls did not significantly reduce readmission."}])
     assert ok["accepted"] is True
+
+
+def test_strong_study_that_could_not_be_opened_is_listed_and_certainty_must_say_provisional(setup):
+    from verified_lit_review.agent import strength
+    assert strength({"title": "Chlorhexidine bathing: a systematic review and meta-analysis"}) == "review"
+    assert strength({"title": "Bathing of the critically ill", "doi": "10.1002/14651858.CD012248.pub2"}) == "review"
+    assert strength({"title": "Daily bathing: a cluster-randomised crossover trial"}) == "trial"
+    assert strength({"title": "Nurses' views on bathing"}) is None
+    store, pid, tmp = setup
+    cochrane = store.upsert_paper({"doi": "10.1002/14651858.CD012248.pub2", "source": "pubmed",
+                                   "title": "Chlorhexidine bathing of the critically ill", "authors": "Lewis SR"})
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    agent.failed = [cochrane]                         # the agent tried it; no open PDF
+    r = agent.submit_report([article(pid, [{"page": 1, "text": GOOD}])], certainty="Low.")
+    assert r["accepted"] is False and "provisional" in r["certainty_must_be_provisional"]
+    assert agent.not_read == [{"paper_id": cochrane, "why_important": "", "auto": "review"}]   # listed by the code
+    ok = agent.fix_report([{"field": "certainty", "paper_id": "", "index": 0, "page": 0,
+                            "text": "Low and provisional: the Cochrane review could not be opened."}])
+    assert ok["accepted"] is True
+
+
+def test_report_explains_an_automatically_listed_study_and_warns_when_most_strong_ones_are_missing(setup):
+    store, pid, tmp = setup
+    cochrane = store.upsert_paper({"doi": "10.1002/14651858.CD012248.pub2", "source": "pubmed",
+                                   "title": "Chlorhexidine bathing of the critically ill", "authors": "Lewis SR",
+                                   "year": "2019"})
+    art = article(pid, [{"page": 1, "text": GOOD}])
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)),
+                         reply(tool_call("submit_report", articles=[art], certainty="Low, provisional.",
+                                         conclusion="", pico="", bottom_line="", not_read=[]))])
+    agent = Agent(store, str(tmp), client=client)
+    agent.failed = [cochrane]
+    agent.run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
+    report = (tmp / "r.md").read_text(encoding="utf-8")
+    assert "A systematic review or meta-analysis the agent chose to read, but it was not open access." in report
+    assert "Strong studies missing:** 1 of the 1 strongest" in report

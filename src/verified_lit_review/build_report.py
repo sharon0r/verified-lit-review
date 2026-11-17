@@ -53,6 +53,11 @@ LABELS = {
                numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא עברו בדיקה",
                r_not_in_paper="לא מופיע במאמר", r_not_on_page="לא בעמוד שצוין",
                r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
+               auto_review="סקירה שיטתית או מטה-אנליזה שהסוכן בחר לקרוא, אך לא הייתה בגישה פתוחה.",
+               auto_trial="ניסוי אקראי שהסוכן בחר לקרוא, אך לא היה בגישה פתוחה.",
+               missing_strong=("**חסרים מחקרים חזקים:** {failed} מתוך {total} המחקרים החזקים שהסוכן ניסה לפתוח "
+                               "(סקירות שיטתיות וניסויים אקראיים) לא היו בגישה פתוחה. רמת הוודאות זמנית, "
+                               "והמסקנה עלולה להשתנות כשיקראו אותם."),
                direction_warning=("**בדיקה אוטומטית:** בחלק מהמאמרים יש תוצאות מובהקות בכיוונים הפוכים, "
                                   "והמסקנה לא מציינת זאת. כדאי לבדוק את הממצאים מול המסקנה."),
                no_numbers="אין מספרים לבדיקה",
@@ -79,6 +84,11 @@ LABELS = {
                numbers="Numbers checked against the paper", found="found", not_found="failed the check",
                r_not_in_paper="not in the paper", r_not_on_page="not on the cited page",
                r_sign="sign differs from the paper", r_ci_apart="estimate and interval not printed together",
+               auto_review="A systematic review or meta-analysis the agent chose to read, but it was not open access.",
+               auto_trial="A randomized trial the agent chose to read, but it was not open access.",
+               missing_strong=("**Strong studies missing:** {failed} of the {total} strongest studies the agent "
+                               "tried to open (systematic reviews, randomized trials) were not open access. The "
+                               "certainty is provisional, and the conclusion may change once they are read."),
                direction_warning=("**Automatic check:** some papers report significant results in opposite "
                                   "directions, and the conclusion does not say so. Check the findings against "
                                   "the conclusion."),
@@ -213,6 +223,9 @@ def build_report(spec, pdf_dir, out):
             md += [f"> ⚠️ {L['direction_warning']}", ""]
     if spec.get("certainty"):
         md += [f"**{L['certainty']}:** {spec['certainty']}", ""]
+    failed, read = (spec.get("missing_strong") or [0, 0])
+    if failed > read:
+        md += [f"> ⚠️ {L['missing_strong'].format(failed=failed, total=failed + read)}", ""]
     md += [f"## {L['papers']}", ""]
     for i, a in enumerate(arts, 1):
         md.append(f"{i}. **{a.get('topic', '')}** — {cite_link(a)}"
@@ -221,7 +234,8 @@ def build_report(spec, pdf_dir, out):
     if spec.get("not_read"):
         md += [f"## {L['not_read']}", "", L["not_read_note"], ""]
         for n in spec["not_read"]:
-            md.append(f"- {linked_title(n)} ({short_cite(n)}) — **{L['why_important']}:** {n['why_important']}")
+            why = n.get("why_important") or L.get(f"auto_{n.get('auto')}", "")
+            md.append(f"- {linked_title(n)} ({short_cite(n)}) — **{L['why_important']}:** {why}")
         md.append("")
 
     ok_n, rejected = 0, []
