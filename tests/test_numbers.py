@@ -26,6 +26,13 @@ def test_invented_or_computed_numbers_are_flagged():
     assert bad == ["0.59", "79", "1000", "13"]
 
 
+def test_decimal_comma_in_the_paper_matches_a_decimal_point_in_the_report():
+    # a Spanish review printed "23,2 vs 40,9 (p=0,034)"; the report kept the commas in Hebrew text
+    paper = numbers.PaperNumbers(["Infecciones 23,2 frente a 40,9 por 1.000 días (p=0,034); n=1,000"])
+    ok, bad = numbers.check("23.2 vs 40.9 per 1,000 patient-days (p=0.034)", paper)
+    assert bad == [] and set(ok) == {"23.2", "40.9", "1000", "0.034"}
+
+
 def test_long_author_list_is_marked_as_shortened():
     from verified_lit_review.sources import author_list
     assert author_list([f"A{i}" for i in range(11)]) == "A0, A1, A2, A3, A4, A5, A6, A7, et al."

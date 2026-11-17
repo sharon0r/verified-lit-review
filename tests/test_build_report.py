@@ -131,3 +131,21 @@ def test_missing_pdf_is_an_error(workspace):
     assert proc.returncode == 1
     assert "PDF not found" in proc.stdout
     assert not (workspace / "Research_Summary_Report.md").exists()
+
+
+def test_journal_catalogue_name_is_shortened_for_a_phone():
+    from build_report import short_journal
+    assert short_journal("Euro surveillance : bulletin Europeen sur les maladies transmissibles = "
+                         "European communicable disease bulletin") == "Euro surveillance"
+    assert short_journal("The Brazilian journal of infectious diseases : an official publication") == \
+        "Brazilian journal of infectious diseases"
+    assert short_journal("BMC infectious diseases") == "BMC infectious diseases"
+    assert short_journal(None) == ""
+
+
+def test_pdf_line_end_hyphens_are_joined_for_display_only():
+    from build_report import display_quote
+    assert display_quote("Even though trad- itional levels for superior- ity") == \
+        "Even though traditional levels for superiority"
+    assert display_quote("cross-in- fection rates") == "cross-infection rates"
+    assert display_quote("short- and long-term outcomes") == "short- and long-term outcomes"

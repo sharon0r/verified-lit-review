@@ -158,6 +158,22 @@ def cite_link(a):
     return f"[{cite}]({url})" if url else cite
 
 
+def short_journal(name):
+    """'Euro surveillance : bulletin Europeen ... = European ...' -> 'Euro surveillance'. PubMed gives
+    the full catalogue name, which wraps over three lines on a phone (UX review)."""
+    j = re.split(r"\s+[:=]\s+", " ".join(str(name or "").split()))[0]
+    return re.sub(r"^The\s+", "", j)
+
+
+# "trad- itional", "cross-in- fection": line-end hyphenation left in the PDF text. Joined for display
+# only; the quote is verified as written. "short- and long-term" keeps its hyphen.
+_PDF_HYPHEN = re.compile(r"(?<=[a-z])- (?!(?:and|or|to|nor|vs|versus)\b)(?=[a-z])")
+
+
+def display_quote(text):
+    return _PDF_HYPHEN.sub("", text)
+
+
 def md_cell(text):
     return str(text).replace("|", "\\|").replace("\n", " ")
 
@@ -186,7 +202,7 @@ def build_report(spec, pdf_dir, out):
     md += [f"## {L['papers']}", ""]
     for i, a in enumerate(arts, 1):
         md.append(f"{i}. **{a.get('topic', '')}** — {cite_link(a)}"
-                  + (f" · {a['journal']}" if a.get("journal") else ""))
+                  + (f" · {short_journal(a['journal'])}" if a.get("journal") else ""))
     md.append("")
     if spec.get("not_read"):
         md += [f"## {L['not_read']}", "", L["not_read_note"], ""]
@@ -202,7 +218,7 @@ def build_report(spec, pdf_dir, out):
         with pymupdf.open(path) as doc:
             pages = [norm(p.get_text()) for p in doc]
         off = int(a.get("page_offset") or 0)
-        source = " · ".join(str(x) for x in [short_cite(a), a.get("journal")] if x)
+        source = " · ".join(str(x) for x in [short_cite(a), short_journal(a.get("journal"))] if x)
         md += [f"## {i}. {a.get('topic', a['title'])}", "",
                f"**{L['article']}:** {linked_title(a)}  ", f"**{L['source']}:** {source}  "]
         if a.get("study_type"):
@@ -228,7 +244,7 @@ def build_report(spec, pdf_dir, out):
                 ok_n += 1
                 kept += 1
                 loc = f"{L['pdf_page']} {page}" + (f" ({L['journal_page'].format(page + off)})" if off else "")
-                md += [f"> \"{text}\"", ">", f"> — {loc} · {L['ok']}", ""]
+                md += [f"> \"{display_quote(text)}\"", ">", f"> — {loc} · {L['ok']}", ""]
             else:
                 found = [k + 1 for k, p in enumerate(pages) if n and n in p]
                 rejected.append({"article": i, "file": a["file"], "claimed_page": page,

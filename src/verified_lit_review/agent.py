@@ -20,7 +20,7 @@ import time
 
 from . import numbers
 from .build_report import MIN_QUOTE_CHARS, build_report, norm
-from .db import Store
+from .db import Store, paper_key
 from .fetch import fetch_paper
 from .sources import SEARCHERS, SourceError
 
@@ -50,6 +50,16 @@ ABSTRACT_CHARS = 800
 # A hospital reviewer found an invented author name in a conclusion; numbers were checked, names were not.
 CITED_NAME = re.compile(r"\b([A-Z][A-Za-z'\-]{2,})(?=\s*(?:et al|and colleagues|and co-workers|ועמית|ושות|וחבר"
                         r"|,\s*(?:19|20)\d\d))")
+
+
+def _same_ids(value):
+    """Every paper_id the model sends, at any depth, in the store's form (DOIs lower case)."""
+    if isinstance(value, dict):
+        return {k: paper_key(v) if k == "paper_id" and isinstance(v, str) else _same_ids(v)
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [_same_ids(v) for v in value]
+    return value
 
 
 def _schema(props, required=None):
@@ -121,7 +131,7 @@ TOOLS = [
                        "description": "GRADE-style certainty for the main outcome (high/moderate/low/very low) "
                                       "with one short reason per downgrade"},
          "conclusion": {"type": "string",
-                        "description": f"at most 5 sentences and {CONCLUSION_MAX_WORDS} words answering the "
+                        "description": f"at most 4 sentences (hard limit {CONCLUSION_MAX_WORDS} words) answering the "
                                        "question across all papers: direction, strength and consistency, main "
                                        "gaps; at most 4 key estimates (other numbers stay in the findings)"},
          "articles": {"type": "array", "items": ARTICLE},
@@ -358,7 +368,7 @@ class Agent:
         try:
             if name not in {t["name"] for t in TOOLS}:
                 return {"error": f"unknown tool {name}"}
-            return getattr(self, name)(**args)
+            return getattr(self, name)(**_same_ids(args))
         except (SourceError, ValueError) as e:
             return {"error": str(e)}
         except (TypeError, KeyError) as e:   # e.g. arguments cut off at the output limit

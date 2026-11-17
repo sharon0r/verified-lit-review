@@ -183,6 +183,15 @@ def test_upsert_keeps_pmcid_and_pdf_links_from_an_earlier_source(store):
     assert p["pmcid"] == "PMC5" and p["pdf_urls"] == ["https://x.example/a.pdf"]
 
 
+def test_same_doi_in_upper_and_lower_case_is_one_paper(store):
+    # PubMed gave "CD012248", OpenAlex "cd012248": a cloud run stored both and tried the download twice
+    a = store.upsert_paper({"doi": "10.1002/14651858.CD012248.pub2", "title": "T", "source": "pubmed"})
+    b = store.upsert_paper({"doi": "10.1002/14651858.cd012248.pub2", "title": "T", "source": "openalex"})
+    assert a == b == "10.1002/14651858.cd012248.pub2"
+    assert store.conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0] == 1
+    assert store.get_paper("10.1002/14651858.CD012248.PUB2")["doi"] == "10.1002/14651858.cd012248.pub2"
+
+
 PUBMED_XML = """<PubmedArticleSet><PubmedArticle><MedlineCitation><Article>
 <Journal><JournalIssue><PubDate><Year>2024</Year></PubDate></JournalIssue><Title>Cochrane Database Syst Rev</Title></Journal>
 <ArticleTitle>Exercise-based cardiac rehabilitation for adults with <i>heart failure</i>.</ArticleTitle>

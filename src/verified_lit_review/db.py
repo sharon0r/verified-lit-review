@@ -16,6 +16,14 @@ import os
 import sqlite3
 import time
 
+
+def paper_key(paper_id):
+    """DOIs are case-insensitive, and the sources differ (PubMed upper case, OpenAlex lower case):
+    one paper must get one id, or it is stored twice and its download is tried twice."""
+    pid = (paper_id or "").strip()
+    return pid.lower() if pid.lower().startswith("10.") else pid
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS search_cache (
     source      TEXT NOT NULL,              -- e.g. 'europepmc'
@@ -121,7 +129,8 @@ class Store:
     # ------------------------------------------------------------ papers
     def upsert_paper(self, p):
         """Insert or update a paper dict (keys as returned by sources.search_*). Returns paper_id."""
-        paper_id = p.get("doi") or p.get("pmcid") or p["source_id"]
+        doi = paper_key(p.get("doi")) or None
+        paper_id = doi or p.get("pmcid") or p["source_id"]
         with self.conn:
             self.conn.execute(
                 """INSERT INTO papers (paper_id, doi, pmcid, title, authors, journal, year, abstract,
@@ -132,13 +141,13 @@ class Store:
                        pmcid    = COALESCE(excluded.pmcid, papers.pmcid),
                        pdf_urls = CASE WHEN excluded.pdf_urls = '[]' THEN papers.pdf_urls
                                        ELSE excluded.pdf_urls END""",
-                (paper_id, p.get("doi"), p.get("pmcid"), p["title"], p.get("authors"), p.get("journal"),
+                (paper_id, doi, p.get("pmcid"), p["title"], p.get("authors"), p.get("journal"),
                  p.get("year"), p.get("abstract"), json.dumps(p.get("pdf_urls", [])), p.get("source"),
                  time.time()))
         return paper_id
 
     def get_paper(self, paper_id):
-        row = self.conn.execute("SELECT * FROM papers WHERE paper_id=?", (paper_id,)).fetchone()
+        row = self.conn.execute("SELECT * FROM papers WHERE paper_id=?", (paper_key(paper_id),)).fetchone()
         if not row:
             return None
         d = dict(row)
@@ -148,18 +157,20 @@ class Store:
     def set_pdf(self, paper_id, pdf_path, route=None):
         with self.conn:
             self.conn.execute("UPDATE papers SET pdf_path=?, pdf_sha256=?, pdf_route=? WHERE paper_id=?",
-                              (pdf_path, sha256_file(pdf_path), route, paper_id))
+                              (pdf_path, sha256_file(pdf_path), route, paper_key(paper_id)))
 
     # ------------------------------------------------------------ page text (RAG retrieval)
     def add_pages(self, paper_id, page_texts):
         """Store the text of every PDF page (list index 0 = page 1). Replaces earlier text."""
+        paper_id = paper_key(paper_id)
         with self.conn:
             self.conn.execute("DELETE FROM pages WHERE paper_id=?", (paper_id,))
             self.conn.executemany("INSERT INTO pages (paper_id, page, text) VALUES (?, ?, ?)",
                                   [(paper_id, i, t) for i, t in enumerate(page_texts, 1)])
 
     def page_count(self, paper_id):
-        return self.conn.execute("SELECT COUNT(*) FROM pages WHERE paper_id=?", (paper_id,)).fetchone()[0]
+        return self.conn.execute("SELECT COUNT(*) FROM pages WHERE paper_id=?",
+                                 (paper_key(paper_id),)).fetchone()[0]
 
     def search_pages(self, paper_id, query, k=5):
         """Top-k pages of one paper for a free-text query, ranked by FTS5 BM25."""
@@ -170,7 +181,7 @@ class Store:
         rows = self.conn.execute(
             "SELECT page, text, bm25(pages) AS score FROM pages "
             "WHERE pages MATCH ? AND paper_id=? ORDER BY score LIMIT ?",
-            (match, paper_id, k)).fetchall()
+            (match, paper_key(paper_id), k)).fetchall()
         return [{"page": r["page"], "text": r["text"], "score": r["score"]} for r in rows]
 
     # ------------------------------------------------------------ audit trail

@@ -1,0 +1,4 @@
+[server]
+# Each run writes its PDFs and report under output/. On the cloud that folder is inside the repo,
+# which the file watcher watches, so every run filled the log with watcher warnings.
+folderWatchBlacklist = ["output"]

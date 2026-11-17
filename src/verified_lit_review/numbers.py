@@ -15,6 +15,10 @@ context. In qualitative studies with few numbers there may be nothing to check.
 import re
 
 NUM = re.compile(r"(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\w])|(?<![\w.,])\d+(?:\.\d+)?(?![\w])")
+# A decimal comma, as in Spanish or German papers: "23,2", "2,86", "p=0,034". A report written with
+# a decimal point ("23.2") must still find these; three digits after the comma ("1,000") stay thousands
+# unless the number starts with 0.
+DECIMAL_COMMA = re.compile(r"(?<![\w.,])(?:\d+,\d{1,2}|0,\d+)(?![\w,])")
 
 
 def _canon(token):
@@ -41,6 +45,7 @@ class PaperNumbers:
         self.exact = set()
         for t in page_texts:
             self.exact.update(_canon(m.group()) for m in NUM.finditer(t or ""))
+            self.exact.update(m.group().replace(",", ".") for m in DECIMAL_COMMA.finditer(t or ""))
         self.floats = [float(s) for s in self.exact]
 
     def contains(self, number):

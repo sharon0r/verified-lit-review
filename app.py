@@ -12,6 +12,7 @@ import hmac
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import streamlit as st
@@ -25,15 +26,21 @@ from verified_lit_review import scope, service  # noqa: E402
 # After a push, Streamlit reruns this file but keeps the imported package in memory: a cloud run
 # after a push still used the old report layout and the old output limit. So reload the package when
 # its files change, and keep the background runs that are in progress.
+# Trade-off: a run in progress would continue with half old, half new code, so the reload waits until
+# no run is active, and a lock stops two visitors' pages from reloading at the same moment.
 _PKG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "verified_lit_review")
 _stamp = max(os.path.getmtime(f) for f in glob.glob(os.path.join(_PKG, "*.py")))
-if getattr(service, "_CODE_STAMP", None) != _stamp:     # None: loaded before this check existed
-    _jobs, _lock = service._JOBS, service._JOBS_LOCK
-    for _name in ("numbers", "db", "sources", "fetch", "build_report", "agent", "scope", "service"):
-        if f"verified_lit_review.{_name}" in sys.modules:
-            importlib.reload(sys.modules[f"verified_lit_review.{_name}"])   # same module object, new code
-    service._JOBS, service._JOBS_LOCK = _jobs, _lock
-service._CODE_STAMP = _stamp
+# kept on the module itself: a reload re-runs service.py but keeps names that file does not define
+_reload_lock = service.__dict__.setdefault("_RELOAD_LOCK", threading.Lock())
+with _reload_lock:
+    _busy = any(not j.get("done", True) for j in list(service._JOBS.values()))
+    if getattr(service, "_CODE_STAMP", None) != _stamp and not _busy:   # None: loaded before this check
+        _jobs, _lock = service._JOBS, service._JOBS_LOCK
+        for _name in ("numbers", "db", "sources", "fetch", "build_report", "agent", "scope", "service"):
+            if f"verified_lit_review.{_name}" in sys.modules:
+                importlib.reload(sys.modules[f"verified_lit_review.{_name}"])   # same object, new code
+        service._JOBS, service._JOBS_LOCK = _jobs, _lock
+        service._CODE_STAMP = _stamp
 
 
 def code_version():
@@ -132,11 +139,9 @@ with st.sidebar:
 
 # ------------------------------------------------------------------ main
 st.markdown('<div class="app-title">📚 סקירת ספרות עם ציטוטים מאומתים</div>', unsafe_allow_html=True)
-st.markdown(AUTHOR)
-st.markdown("הזינו שאלת מחקר בכל תחום, וסוכן AI יפיק עבורכם תוך כמה דקות סקירת ספרות ראשונית על סמך עד "
-            "חמישה מאמרים אקדמיים בגישה פתוחה. הסוכן מעדיף סקירות שיטתיות ומחקרים בעלי מערך מחקרי חזק, "
-            "ומאתר בכל מאמר את הקטעים הרלוונטיים לשאלה באמצעות דירוג לפי שכיחות מונחים (BM25). "
-            "**הסקירה נכתבת מתוך קטעים אלה בלבד (RAG), וכל ציטוט בה מאומת אוטומטית מול נוסח המאמר המקורי.**")
+st.markdown("הזינו שאלת מחקר בכל תחום, וסוכן AI יכין תוך כמה דקות סקירת ספרות ראשונית מתוך עד חמישה "
+            "מאמרים בגישה פתוחה, ויעדיף סקירות שיטתיות וניסויים אקראיים. "
+            "**כל ציטוט מאומת אוטומטית מול ה-PDF המקורי.**")
 
 question = st.text_area("שאלת מחקר (באנגלית או בעברית)", key="question", height=80,
                         max_chars=service.MAX_QUESTION_CHARS,
@@ -224,7 +229,8 @@ def follow(job):
         if e is None:
             status.update(label="הסקירה הושלמה", state="complete", expanded=False)
             return True, True
-        if isinstance(e, service.Cancelled):             # the visitor pressed stop: keep their trial run
+        # by name: a run started before a code reload raises the old class, which isinstance would miss
+        if type(e).__name__ == "Cancelled":              # the visitor pressed stop: keep their trial run
             status.update(label="הריצה נעצרה", state="error", expanded=False)
             st.info("הריצה נעצרה. אפשר לתקן את השאלה ולהריץ שוב.")
             return False, False
@@ -335,7 +341,7 @@ if r:
                    f"{time.strftime('%d/%m/%Y %H:%M', time.localtime(run['started_at']))} · נשמר ב-SQLite")
         st.dataframe([{"✅": "✅" if q["verified"] else "❌", "עמוד": q["claimed_page"], "ציטוט": q["text"],
                        "מאמר": q["title"], "הערה": q["reason"] or ""} for q in run["quote_checks"]],
-                     use_container_width=True, hide_index=True)
+                     width="stretch", hide_index=True)
         if r["rejected"]:
             st.warning("ציטוטים שנדחו בבדיקה הסופית מול ה-PDF:")
             st.json(r["rejected"])
