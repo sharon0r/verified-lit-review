@@ -62,12 +62,23 @@ def _same_ids(value):
     return value
 
 
+def bullets_of(article):
+    """The findings as {"text", "pages"}; a plain string (older callers, tests) cites no page."""
+    return [b if isinstance(b, dict) else {"text": str(b), "pages": []} for b in article.get("bullets", [])]
+
+
 def _schema(props, required=None):
     return {"type": "object", "properties": props, "required": required or list(props),
             "additionalProperties": False}
 
 
 QUOTE = _schema({"page": {"type": "integer"}, "text": {"type": "string"}})
+BULLET = _schema({
+    "text": {"type": "string"},
+    "pages": {"type": "array", "items": {"type": "integer"},
+              "description": "the PDF page(s) this finding's numbers are printed on, as retrieve_passages "
+                             "returned them; every number is checked on these pages"},
+})
 ARTICLE = _schema({
     "paper_id": {"type": "string"},
     "topic": {"type": "string", "description": "the sub-topic this paper answers"},
@@ -75,7 +86,7 @@ ARTICLE = _schema({
     "why_chosen": {"type": "string",
                    "description": "one sentence: why this paper was selected over the other candidates "
                                   "(design strength, directness, recency, population)"},
-    "bullets": {"type": "array", "items": {"type": "string"}},
+    "bullets": {"type": "array", "items": BULLET},
     "relevance": {"type": "string", "description": "how it answers the question + its limits"},
     "quotes": {"type": "array", "items": QUOTE},
 })
@@ -92,7 +103,8 @@ EDIT = _schema({
     "field": {"type": "string", "enum": REPORT_FIELDS + ARTICLE_FIELDS + ["bullet", "quote"]},
     "paper_id": {"type": "string", "description": "the paper for article fields, bullet and quote; else empty"},
     "index": {"type": "integer", "description": "bullet or quote position from 0; -1 adds a new one"},
-    "page": {"type": "integer", "description": "page of a quote; 0 otherwise"},
+    "page": {"type": "integer", "description": "page of a quote, or the page a bullet's numbers are "
+                                               "printed on; 0 otherwise (a bullet then keeps its pages)"},
     "text": {"type": "string", "description": "the new text; empty removes the bullet or quote"},
 })
 
@@ -221,10 +233,31 @@ class Agent:
             self._paper_numbers[paper_id] = numbers.PaperNumbers([r["text"] for r in rows])
         return self._paper_numbers[paper_id]
 
+    def _page_index(self, paper_id):
+        key = ("pages", paper_id)
+        if key not in self._paper_numbers:
+            rows = self.store.conn.execute("SELECT page, text FROM pages WHERE paper_id=?", (paper_id,)).fetchall()
+            self._paper_numbers[key] = numbers.PageIndex({int(r["page"]): r["text"] for r in rows})
+        return self._paper_numbers[key]
+
     def _number_check(self, article):
-        """Numbers in the findings and study description that the paper does not contain."""
-        text = " ".join(article.get("bullets", [])) + " " + article.get("study_type", "")
-        return numbers.check(text, self._numbers(article["paper_id"]))
+        """Numbers that fail the check. Findings: on the cited page, same sign, estimate and interval
+        printed together. Study description (sample size, follow-up): anywhere in the paper.
+        Returns (verified, unverified, problems)."""
+        index = self._page_index(article["paper_id"])
+        found, bad, problems = [], [], []
+        for b in bullets_of(article):
+            f, x, p = numbers.check_finding(b["text"], b["pages"], index)
+            found += [n for n in f if n not in found]
+            bad += [n for n in x if n not in bad]
+            problems += p
+        f, x = numbers.check(article.get("study_type", ""), self._numbers(article["paper_id"]))
+        found += [n for n in f if n not in found]
+        for n in x:
+            if n not in bad:
+                bad.append(n)
+                problems.append((n, "not_in_paper", "study description: not printed in the paper"))
+        return [n for n in found if n not in bad], bad, problems
 
     def _conclusion_check(self, articles, conclusion):
         """Numbers in the conclusion must come from the verified evidence of a paper: a finding whose
@@ -238,8 +271,8 @@ class Agent:
 
     def _name_check(self, articles, conclusion):
         """Author names used to cite a paper that appear in no search result and in no fetched paper."""
-        texts = [conclusion] + [" ".join([a.get("why_chosen", ""), a.get("relevance", "")] + a.get("bullets", []))
-                                for a in articles]
+        texts = [conclusion] + [" ".join([a.get("why_chosen", ""), a.get("relevance", "")]
+                                         + [b["text"] for b in bullets_of(a)]) for a in articles]
         for a in articles:
             self.author_words.update(w.lower() for w in re.findall(
                 r"[^\W\d_]{2,}", (self.store.get_paper(a["paper_id"]) or {}).get("authors") or ""))
@@ -289,8 +322,14 @@ class Agent:
             if f in ARTICLE_FIELDS:
                 a[f] = text
                 continue
+            if f == "bullet":
+                a["bullets"] = bullets_of(a)
             items, i = (a["bullets"], e["index"]) if f == "bullet" else (a["quotes"], e["index"])
-            new = text if f == "bullet" else {"page": e["page"], "text": text}
+            if f == "bullet":
+                old = items[i]["pages"] if 0 <= i < len(items) else []
+                new = {"text": text, "pages": [e["page"]] if e["page"] else old}
+            else:
+                new = {"page": e["page"], "text": text}
             if i == -1 and text:
                 items.append(new)
             elif 0 <= i < len(items):
@@ -345,8 +384,9 @@ class Agent:
                     self.bounced.append({"submission": self.submissions, "paper_id": a["paper_id"],
                                          "page": int(q["page"]), "text": q["text"], "found_on": found,
                                          "reason": reason})
-        number_warnings = [{"paper_id": a["paper_id"], "numbers_not_in_paper": bad}
-                           for a in articles for bad in [self._number_check(a)[1]] if bad]
+        number_warnings = [{"paper_id": a["paper_id"], "numbers_not_in_paper": c[1],
+                            "problems": [f"{n}: {detail}" for n, _, detail in c[2]]}
+                           for a in articles for c in [self._number_check(a)] if c[1]]
         _, bad_conclusion = self._conclusion_check(articles, conclusion)
         if bad_conclusion:
             number_warnings.append({"paper_id": "conclusion", "numbers_not_in_paper": bad_conclusion})
@@ -358,7 +398,7 @@ class Agent:
         retry = ((failures or number_warnings or bad_names or not_read_numbers or too_long)
                  and self.submissions < MAX_SUBMITS)
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
-                      + (f", {n_bad} number(s) not found in the papers" if n_bad else "")
+                      + (f", {n_bad} number(s) failed the check" if n_bad else "")
                       + (f", author name(s) not in any paper: {', '.join(bad_names)}" if bad_names else "")
                       + (", text too long" if too_long else "")
                       + (" - sent back to the agent for a quick fix" if retry else ""))
@@ -370,7 +410,10 @@ class Agent:
                     "instruction": "Call fix_report with edits for only these items; do not resubmit the whole "
                                    "report. Quotes: copy exactly from retrieved pages, or remove them. Numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
-                                   "never compute new numbers. A number in the conclusion must also appear in "
+                                   "never compute new numbers. A number on another page than the bullet cites: "
+                                   "give the right page (edit 'page') or the right number. A sign that differs: "
+                                   "copy the paper's sign. An estimate whose interval is not printed with it: "
+                                   "check that both come from the same result. A number in the conclusion must also appear in "
                                    "a finding or quote of the paper it comes from. Author names not found: use "
                                    "the first author exactly as the search results list it. not_read papers: "
                                    "say only why they matter, with no numbers or results. Too long: shorten."}
@@ -471,11 +514,14 @@ class Agent:
             p = self.store.get_paper(a["paper_id"]) or {}
             if not p.get("pdf_path"):
                 continue
+            checked = self._number_check(a)
             arts.append({"file": os.path.abspath(p["pdf_path"]), "title": p["title"], "authors": p.get("authors"),
                          "year": p.get("year"), "journal": p.get("journal"), "doi": p.get("doi"),
-                         "pmcid": p.get("pmcid"), "topic": a["topic"], "study_type": a["study_type"], "bullets": a["bullets"],
+                         "pmcid": p.get("pmcid"), "topic": a["topic"], "study_type": a["study_type"],
+                         "bullets": [b["text"] for b in bullets_of(a)],
                          "why_chosen": a.get("why_chosen", ""),
-                         "numbers": dict(zip(("verified", "unverified"), self._number_check(a))),
+                         "numbers": {"verified": checked[0], "unverified": checked[1],
+                                     "reasons": {n: kind for n, kind, _ in reversed(checked[2])}},
                          "database": DATABASE_NAMES.get(p.get("source"), p.get("source")),
                          "download_route": p.get("pdf_route"),
                          "relevance": a["relevance"], "quotes": a["quotes"]})

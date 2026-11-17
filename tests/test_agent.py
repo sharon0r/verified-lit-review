@@ -333,4 +333,20 @@ def test_invented_number_is_sent_back_and_flagged_if_kept(setup):
     assert '"accepted": false' in feedback and "9.9" in feedback        # returned to the agent
     report = (tmp / "r.md").read_text(encoding="utf-8")
     # 18.2 (finding) and 240 (study type "n=240") are in the paper; 9.9 is not
-    assert "⚠️ **not found in the paper:** 9.9" in report and "2/3 found" in report
+    assert "⚠️ **failed the check:** 9.9 (not in the paper)" in report and "2/3 found" in report
+
+
+def test_finding_number_on_another_page_than_cited_is_sent_back_with_the_reason(setup):
+    store, pid, tmp = setup
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    art = {**article(pid, [{"page": 1, "text": GOOD}]),
+           "bullets": [{"text": "Readmission fell from 18.2% to 12.5%.", "pages": [2]}]}
+    r = agent.submit_report([art])
+    assert r["accepted"] is False
+    assert r["number_warnings"][0]["numbers_not_in_paper"] == ["18.2", "12.5"]
+    assert "not on the cited page" in r["number_warnings"][0]["problems"][0]
+    # the agent fixes only the page of that bullet
+    ok = agent.fix_report([{"field": "bullet", "paper_id": pid, "index": 0, "page": 1,
+                            "text": "Readmission fell from 18.2% to 12.5%."}])
+    assert ok["accepted"] is True and agent.final[0]["bullets"][0]["pages"] == [1]

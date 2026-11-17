@@ -50,7 +50,9 @@ LABELS = {
                cols=["#", "נושא", "שם המאמר", "מחברים", "שנה", "מקור"], article="שם המאמר",
                authors="מחברים", source="מקור", type="סוג המחקר", file="קובץ",
                why="למה נבחר", database="נמצא במאגר", route="הורד דרך",
-               numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא נמצאו במאמר",
+               numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא עברו בדיקה",
+               r_not_in_paper="לא מופיע במאמר", r_not_on_page="לא בעמוד שצוין",
+               r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
                no_numbers="אין מספרים לבדיקה",
                conclusion_numbers="מספרים במסקנה שנבדקו מול הממצאים המאומתים", not_traced="לא מופיעים בממצאים",
                findings="עיקרי הממצאים", relevance="רלוונטיות והסתייגויות", quotes="ציטוטים מתוך המאמר",
@@ -72,7 +74,9 @@ LABELS = {
                cols=["#", "Topic", "Title", "Authors", "Year", "Source"], article="Title",
                authors="Authors", source="Source", type="Study type", file="File",
                why="Why chosen", database="Found in", route="downloaded via",
-               numbers="Numbers checked against the paper", found="found", not_found="not found in the paper",
+               numbers="Numbers checked against the paper", found="found", not_found="failed the check",
+               r_not_in_paper="not in the paper", r_not_on_page="not on the cited page",
+               r_sign="sign differs from the paper", r_ci_apart="estimate and interval not printed together",
                no_numbers="no numbers to check",
                conclusion_numbers="Numbers in the conclusion checked against the verified findings",
                not_traced="not in the findings",
@@ -97,6 +101,7 @@ LABELS = {
 
 
 DECIMAL, MINUS = "\x01", "\x02"  # placeholders that survive the final strip
+REASONS = {"not_in_paper", "not_on_page", "sign", "ci_apart"}   # numbers.check_finding problem kinds
 MIN_QUOTE_CHARS = 20  # normalized length; shorter quotes are not specific enough to prove anything
 
 
@@ -122,7 +127,9 @@ def number_line(L, result, label="numbers", missing="not_found"):
     if not ok and not bad:
         return f"_{L[label]}: {L['no_numbers']}_"
     line = f"_{L[label]}: {len(ok)}/{len(ok) + len(bad)} {L['found']}_"
-    return line + (f" · ⚠️ **{L[missing]}:** {', '.join(bad)}" if bad else " ✅")
+    why = result.get("reasons", {})
+    shown = [f"{n} ({L['r_' + why[n]]})" if why.get(n) in REASONS else n for n in bad]
+    return line + (f" · ⚠️ **{L[missing]}:** {', '.join(shown)}" if bad else " ✅")
 
 
 def paper_url(a):
