@@ -487,3 +487,20 @@ def test_named_trial_not_found_is_reported_by_the_code_and_has_its_own_budget(se
     agent.submit_report([article(pid, [{"page": 1, "text": GOOD}])])
     agent._write_report(store.start_run("q"), "q", "en", str(tmp / "r.md"), 1.0)
     assert "**Searched by first author and not found:** Climo" in (tmp / "r.md").read_text(encoding="utf-8")
+
+
+def test_model_sees_a_window_around_the_query_but_quotes_are_checked_on_the_full_page(setup):
+    from verified_lit_review.agent import PAGE_CHARS, focus
+    store, pid, tmp = setup
+    filler = "Background text about other topics. " * 200
+    page = filler + "Primary outcome: readmission fell to 12.5% (RR 0.69, 95% CI 0.56 to 0.86) in the trial. " + filler
+    window, start = focus(page, "readmission outcome RR", PAGE_CHARS)
+    assert "RR 0.69" in window and len(window) <= PAGE_CHARS and start > 0
+    store.add_pages(pid, [page])
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    hit = agent.retrieve_passages(pid, "readmission outcome RR", k=1)[0]
+    assert "RR 0.69" in hit["untrusted_document_text"] and "of" in hit["shown_chars"]
+    # a sentence far outside the window the model saw is still verified against the full page text
+    far = "Background text about other topics. Background text about other topics."
+    assert agent.verify_quote(pid, 1, far)["verified"] is True

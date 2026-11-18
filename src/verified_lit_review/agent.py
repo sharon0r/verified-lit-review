@@ -34,14 +34,19 @@ MAX_TURNS = 30
 
 class Cancelled(RuntimeError):
     """The user stopped the run (checked before each model call, so no further cost)."""
-MAX_COST_USD = float(os.environ.get("MAX_COST_PER_RUN", "1.00"))   # hard stop for one runaway run
+# hard stop for one runaway run; same default as the deployed app (an education run with long papers
+# stopped at $1.07 locally under a 1.00 default, while the cloud allows 1.50)
+MAX_COST_USD = float(os.environ.get("MAX_COST_PER_RUN", "1.50"))
 MAX_SUBMITS = 2            # one send-back; fix_report makes it cheap (only the flagged items)
 # Opus 5.5 always thinks, and thinking counts against max_tokens. A cloud run hit a 16000 cap twice
 # while rewriting a 5-paper report (110 s each, nothing usable), so the limit is higher and streamed.
 MAX_OUTPUT_TOKENS = 48000
 CONCLUSION_MAX_WORDS = 130  # about 5 sentences; an AI physician-reviewer agent found a 12-sentence, 25-number one
 BOTTOM_LINE_MAX_WORDS = 55
-PAGE_CHARS = 4000
+# What the model reads of one page: the window around the query words, not the page's first characters.
+# Long papers (23-page education reviews) made runs costly. Checks still use the FULL page text and the
+# PDF file, so a shorter window cannot weaken the verification.
+PAGE_CHARS = 2500
 # Every turn re-sends the whole conversation, so turns cost both time and money. Measured runs spent
 # up to 10 turns searching again after failed downloads; the code now ends the search phase.
 MAX_SEARCH_TURNS = 3
@@ -77,6 +82,26 @@ def strength(paper):
     if TRIAL.search(text):
         return "trial"
     return None
+
+
+def focus(text, query, size):
+    """The `size`-character window of `text` with the most query words, cut at spaces.
+    Returns (window, start offset). The whole text when it is short enough."""
+    if len(text) <= size:
+        return text, 0
+    terms = re.findall(r"\w{3,}", query.lower())
+    low = text.lower()
+    best, best_hits = 0, -1
+    for start in range(0, len(text) - size + 1, 200):
+        hits = sum(low.count(t, start, start + size) for t in terms)
+        if hits > best_hits:
+            best, best_hits = start, hits
+    start = text.rfind(" ", 0, best) + 1 if best else 0
+    end = min(len(text), start + size)
+    cut = text.rfind(" ", start, end)
+    if end < len(text) and cut > start:
+        end = cut
+    return text[start:end], start
 
 
 def bullets_of(article):
@@ -288,7 +313,14 @@ class Agent:
         hits = self.store.search_pages(paper_id, query, k=max(1, min(int(k), 4)))
         self.on_event("retrieve", f"{paper_id}: pages {[h['page'] for h in hits]} for '{query}'")
         # labelled as document data: text inside a PDF is never an instruction to the agent
-        return [{"page": h["page"], "untrusted_document_text": h["text"][:PAGE_CHARS]} for h in hits]
+        out = []
+        for h in hits:
+            text, start = focus(h["text"], query, PAGE_CHARS)
+            item = {"page": h["page"], "untrusted_document_text": text}
+            if len(text) < len(h["text"]):
+                item["shown_chars"] = f"{start}-{start + len(text)} of {len(h['text'])}"
+            out.append(item)
+        return out
 
     def _check(self, paper_id, page, text):
         """The guardrail, on the indexed page text. Returns (verified, found_on_pages, reason)."""
