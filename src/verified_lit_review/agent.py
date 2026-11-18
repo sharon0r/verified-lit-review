@@ -126,12 +126,13 @@ MIN_ABSTRACT_CHARS = 200
 REPORT_FIELDS = ["bottom_line", "conclusion", "certainty", "pico"]
 ARTICLE_FIELDS = ["topic", "study_type", "why_chosen", "relevance"]
 EDIT = _schema({
-    "field": {"type": "string", "enum": REPORT_FIELDS + ARTICLE_FIELDS + ["bullet", "quote"]},
+    "field": {"type": "string", "enum": REPORT_FIELDS + ARTICLE_FIELDS + ["bullet", "quote", "included_trials"]},
     "paper_id": {"type": "string", "description": "the paper for article fields, bullet and quote; else empty"},
     "index": {"type": "integer", "description": "bullet or quote position from 0; -1 adds a new one"},
     "page": {"type": "integer", "description": "page of a quote, or the page a bullet's numbers are "
                                                "printed on; 0 otherwise (a bullet then keeps its pages)"},
-    "text": {"type": "string", "description": "the new text; empty removes the bullet or quote"},
+    "text": {"type": "string", "description": "the new text; empty removes the bullet or quote; for "
+                                              "included_trials, the names separated by ';'"},
 })
 
 TOOLS = [
@@ -403,6 +404,9 @@ class Agent:
             if f in ARTICLE_FIELDS:
                 a[f] = text
                 continue
+            if f == "included_trials":
+                a[f] = [s.strip() for s in re.split(r"[;\n]", text) if s.strip()]
+                continue
             if f == "bullet":
                 a["bullets"] = bullets_of(a)
             items, i = (a["bullets"], e["index"]) if f == "bullet" else (a["quotes"], e["index"])
@@ -504,6 +508,7 @@ class Agent:
                      if claims.unlabelled_secondary(b["text"])]
         # every review lists the trials it includes, so overlap can be shown
         no_trials = [a["paper_id"] for a in articles if not a.get("included_trials")
+                     and a["paper_id"] not in self.abstract_only          # an abstract rarely names them
                      and strength(self.store.get_paper(a["paper_id"]) or {}) == "review"]
         # opposite significant directions not acknowledged (warning only, never sent back)
         self.direction_warnings = claims.direction_warnings(

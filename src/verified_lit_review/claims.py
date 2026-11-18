@@ -133,7 +133,9 @@ def direction_warnings(paper_texts, conclusion):
     down, up = set(), set()
     for pid, text in paper_texts.items():
         for e in estimates(text):
-            if e["null"]:
+            # only ratios: a difference's sign depends on which arm is subtracted from which (a real
+            # Cochrane abstract gave 'rate difference 1.70' for fewer infections)
+            if e["null"] or e["kind"] != "ratio":
                 continue
             (down if e["b"] < e["no_effect"] else up).add(pid)
     if down and up and (down - up or up - down) and not DISAGREE.search(conclusion or ""):

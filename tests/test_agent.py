@@ -457,3 +457,19 @@ def test_abstract_only_paper_is_marked_kept_out_of_conclusion_numbers_and_certai
     out = agent._write_report(agent.store.start_run("q"), "q", "en", str(tmp / "r.md"), 1.0)
     report = (tmp / "r.md").read_text(encoding="utf-8")
     assert out["verified"] == 2 and "📄 **From the abstract only" in report and "— abstract · ✅ verified" in report
+
+
+def test_review_without_included_trials_can_be_fixed_with_a_small_edit(setup):
+    store, pid, tmp = setup
+    review = store.upsert_paper({"doi": "10.1/sr", "source": "pubmed", "title": "Bathing: a meta-analysis",
+                                 "authors": "Frost SA"})
+    store.add_pages(review, ["Included trials: Climo 2013 and Noto 2015 were pooled."])
+    agent = Agent(store, str(tmp))
+    agent.fetched.update({pid, review})
+    sr = {"paper_id": review, "topic": "t", "study_type": "meta-analysis of randomized trials", "relevance": "r",
+          "bullets": [], "quotes": [], "included_trials": []}
+    r = agent.submit_report([article(pid, [{"page": 1, "text": GOOD}]), sr])
+    assert r["accepted"] is False and r["reviews_without_included_trials"] == [review]
+    ok = agent.fix_report([{"field": "included_trials", "paper_id": review, "index": 0, "page": 0,
+                            "text": "Climo 2013; Noto 2015"}])
+    assert ok["accepted"] is True and agent.final[1]["included_trials"] == ["Climo 2013", "Noto 2015"]

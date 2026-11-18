@@ -57,3 +57,8 @@ def test_secondary_outcome_must_be_marked_exploratory():
     assert not claims.unlabelled_secondary("Secondary outcome (exploratory): fewer resistant organisms.")
     assert not claims.unlabelled_secondary("תוצאה משנית, ממצא גישוש: פחות חיידקים עמידים.")
     assert not claims.unlabelled_secondary("Primary outcome: no difference.")
+
+
+def test_direction_warning_ignores_differences_whose_sign_is_a_convention():
+    papers = {"a": "RR 0.70 (0.55 to 0.89)", "b": "rate difference 1.70 (95% CI 0.12 to 3.29)"}
+    assert not claims.direction_warnings(papers, "Bathing may reduce infection.")
