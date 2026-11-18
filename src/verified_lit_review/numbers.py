@@ -23,6 +23,9 @@ NUM = re.compile(r"(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\w])|(?<![\w.,])\d+
 # a decimal point ("23.2") must still find these; three digits after the comma ("1,000") stay thousands
 # unless the number starts with 0.
 DECIMAL_COMMA = re.compile(r"(?<![\w.,])(?:\d+,\d{1,2}|0,\d+)(?![\w,])")
+# A dot as thousands separator, as in Spanish papers: "n=4.488" is 4488 patients. Read both ways,
+# because "4.488" may also be a decimal; a real Spanish review's sample sizes failed without this.
+DOT_THOUSANDS = re.compile(r"(?<![\w.,])[1-9]\d{0,2}(?:\.\d{3})+(?![\w.,]?\d)")
 
 
 MID_DOT = re.compile(r"(?<=\d)[⋅·∙](?=\d)")
@@ -59,6 +62,7 @@ class PaperNumbers:
             t = clean_decimals(t)
             self.exact.update(_canon(m.group()) for m in NUM.finditer(t or ""))
             self.exact.update(m.group().replace(",", ".") for m in DECIMAL_COMMA.finditer(t or ""))
+            self.exact.update(m.group().replace(".", "") for m in DOT_THOUSANDS.finditer(t or ""))
         self.floats = [float(s) for s in self.exact]
 
     def contains(self, number):
@@ -119,6 +123,9 @@ def tokens(text):
         out.append((s, float(s), _negative(text, m.start()), m.start()))
     for m in DECIMAL_COMMA.finditer(text or ""):
         s = m.group().replace(",", ".")
+        out.append((s, float(s), _negative(text, m.start()), m.start()))
+    for m in DOT_THOUSANDS.finditer(text or ""):
+        s = m.group().replace(".", "")
         out.append((s, float(s), _negative(text, m.start()), m.start()))
     return out
 

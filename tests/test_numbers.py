@@ -91,3 +91,11 @@ def test_deliberate_errors_are_caught():
     assert numbers.check_finding("RR 0.76 (0.60 to 0.94)", [1], index)[2][0][1] == "not_in_paper"
     # a real estimate paired with another result's interval: every number exists, the pairing is wrong
     assert numbers.check_finding("RR 0.85 (0.60 to 0.94)", [1], index)[2][0][1] == "ci_apart"
+
+
+def test_dot_as_thousands_separator_in_a_spanish_paper():
+    # a real Spanish review printed "n=4.488" and "55/4.488 vs 60/4.852"; the report's 4,488 was right
+    index = idx(p5="GI: n=4.488 higiene diaria; GC: n=4.852. Infecciones/pacientes: 55/4.488 vs 60/4.852")
+    assert numbers.check_finding("Noto: 4,488 in the chlorhexidine arm, 4,852 in control", [5], index)[1] == []
+    assert numbers.PaperNumbers(["n=4.488"]).contains("4488")
+    assert numbers.PaperNumbers(["OR 4.488"]).contains("4.488")          # still readable as a decimal
