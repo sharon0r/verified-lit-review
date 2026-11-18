@@ -64,8 +64,9 @@ LABELS = {
                fit="התאמה לשאלה", p_population="אוכלוסייה", p_intervention="התערבות",
                p_comparison="השוואה", p_outcome="תוצאה",
                overlap="חפיפה בין הסקירות",
-               overlap_note="_ניסויים שנכללו ביותר מסקירה אחת. הסקירות חולקות אותם, ולכן אינן אישור בלתי תלוי זו של זו._",
-               overlap_item="נכלל ב-{n} מתוך {of} הסקירות",
+               overlap_note=("_ניסויים שמוזכרים בשמם ובשנתם ביותר מסקירה אחת (בטבלה, בטקסט או ברשימת המקורות). "
+                             "סביר שהסקירות חולקות אותם, ולכן אינן אישור בלתי תלוי זו של זו._"),
+               overlap_item="מוזכר ב-{n} מתוך {of} הסקירות",
                start_high="רמת הפתיחה, שנקבעה בקוד לפי סוגי המחקרים: גבוהה (יש ניסויים אקראיים). כל הורדה מנומקת.",
                start_low="רמת הפתיחה, שנקבעה בקוד לפי סוגי המחקרים: נמוכה (מחקרים תצפיתיים בלבד).",
                auto_review="סקירה שיטתית או מטה-אנליזה שהסוכן בחר לקרוא, אך לא הייתה בגישה פתוחה.",
@@ -112,8 +113,9 @@ LABELS = {
                fit="Fit to the question", p_population="population", p_intervention="intervention",
                p_comparison="comparison", p_outcome="outcome",
                overlap="Overlap between the reviews",
-               overlap_note="_Trials included in more than one review. The reviews share them, so they do not confirm each other independently._",
-               overlap_item="in {n} of the {of} reviews",
+               overlap_note=("_Trials named, with their year, in more than one review (in a table, the text or the reference "
+                             "list). The reviews likely share them, so they do not confirm each other independently._"),
+               overlap_item="mentioned in {n} of the {of} reviews",
                start_high="Starting level, set in code from the study designs: high (randomized trials). Every step down is explained.",
                start_low="Starting level, set in code from the study designs: low (observational studies only).",
                auto_review="A systematic review or meta-analysis the agent chose to read, but it was not open access.",
