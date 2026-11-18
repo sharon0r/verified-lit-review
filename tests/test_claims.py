@@ -42,3 +42,18 @@ def test_between_wording_and_effect_sizes_are_read():
     e = claims.estimates("ES=0.19 (רווח בר-סמך 95% בין 0.15 ל-0.23)")
     assert e[0]["kind"] == "difference" and (e[0]["a"], e[0]["b"]) == (0.15, 0.23) and e[0]["null"] is False
     assert claims.overclaims("Feedback improved scores (SMD 0.10, 95% CI between -0.05 and 0.25).")
+
+
+def test_compared_values_must_name_their_arms():
+    # the real CLEAN-IT finding: which arm had 3.99?
+    assert claims.unnamed_arms("3⋅99 לעומת 3⋅45 ל-1,000 ימי אשפוז (יחס שיעורים 1⋅09)")
+    assert not claims.unnamed_arms("3.99 בזרוע הכלורהקסידין לעומת 3.45 בזרוע הביקורת")
+    assert not claims.unnamed_arms("2.25 vs 5.01 per 1,000 days in the intervention and control ICUs")
+    assert not claims.unnamed_arms("23.2 בכלורהקסידין לעומת 40.9 בסבון", ["כלורהקסידין", "סבון"])
+
+
+def test_secondary_outcome_must_be_marked_exploratory():
+    assert claims.unlabelled_secondary("Secondary outcome: fewer resistant organisms (p=0.03).")
+    assert not claims.unlabelled_secondary("Secondary outcome (exploratory): fewer resistant organisms.")
+    assert not claims.unlabelled_secondary("תוצאה משנית, ממצא גישוש: פחות חיידקים עמידים.")
+    assert not claims.unlabelled_secondary("Primary outcome: no difference.")

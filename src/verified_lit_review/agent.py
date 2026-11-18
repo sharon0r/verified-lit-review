@@ -459,6 +459,20 @@ class Agent:
             places += [(f"{a['paper_id']} finding {i}", b["text"]) for i, b in enumerate(bullets_of(a))]
             places.append((f"{a['paper_id']} relevance", a.get("relevance", "")))
         overclaimed = [f"{where}: {c}" for where, text in places for c in claims.overclaims(text)]
+        # every compared pair of values names its arms ("3.99 in the chlorhexidine arm vs 3.45 in control")
+        unnamed = []
+        for a in articles:
+            words = []
+            for part in ("intervention", "comparison"):
+                for w in re.findall(r"[^\W\d_]{4,}", ((a.get("pico_fit") or {}).get(part) or {}).get("studied", "")):
+                    words += [w, w[1:]] if w[0] in "בהולמשכ" and len(w) > 5 else [w]
+            for i, b in enumerate(bullets_of(a)):
+                unnamed += [f"{a['paper_id']} finding {i}: {c}" for c in claims.unnamed_arms(b["text"], words)]
+        secondary = [f"{a['paper_id']} finding {i}" for a in articles for i, b in enumerate(bullets_of(a))
+                     if claims.unlabelled_secondary(b["text"])]
+        # every review lists the trials it includes, so overlap can be shown
+        no_trials = [a["paper_id"] for a in articles if not a.get("included_trials")
+                     and strength(self.store.get_paper(a["paper_id"]) or {}) == "review"]
         # opposite significant directions not acknowledged (warning only, never sent back)
         self.direction_warnings = claims.direction_warnings(
             {a["paper_id"]: " ".join(b["text"] for b in bullets_of(a)) for a in articles},
@@ -466,7 +480,8 @@ class Agent:
         total = sum(len(a["quotes"]) for a in articles)
         n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
         retry = ((failures or number_warnings or bad_names or not_read_numbers or too_long or overclaimed
-                  or provisional or grade_problem or pico) and self.submissions < MAX_SUBMITS)
+                  or provisional or grade_problem or pico or unnamed or secondary or no_trials)
+                 and self.submissions < MAX_SUBMITS)
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
                       + (f", {n_bad} number(s) failed the check" if n_bad else "")
                       + (f", author name(s) not in any paper: {', '.join(bad_names)}" if bad_names else "")
@@ -476,6 +491,9 @@ class Agent:
                       + (", certainty must say provisional (most strong studies unread)" if provisional else "")
                       + (", certainty rating not explained against its start" if grade_problem else "")
                       + (f", {len(pico)} PICO fit problem(s)" if pico else "")
+                      + (f", {len(unnamed)} comparison(s) without arms" if unnamed else "")
+                      + (f", {len(secondary)} secondary outcome(s) not marked exploratory" if secondary else "")
+                      + (f", {len(no_trials)} review(s) without included trials" if no_trials else "")
                       + (" - sent back to the agent for a quick fix" if retry else ""))
         self.final = articles
         if retry:
@@ -483,7 +501,9 @@ class Agent:
                     "author_names_not_found": bad_names, "not_read_with_numbers": not_read_numbers,
                     "too_long": too_long, "effect_claimed_on_non_significant_result": overclaimed,
                     "certainty_must_be_provisional": provisional, "certainty_rating": grade_problem,
-                    "pico_fit": pico,
+                    "pico_fit": pico, "arms_not_named": unnamed,
+                    "secondary_outcome_not_marked_exploratory": secondary,
+                    "reviews_without_included_trials": no_trials,
                     "instruction": "Call fix_report with edits for only these items; do not resubmit the whole "
                                    "report. Quotes: copy exactly from retrieved pages, or remove them. Numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
@@ -496,7 +516,9 @@ class Agent:
                                    "say only why they matter, with no numbers or results. Too long: shorten. "
                                    "Effect claimed on a non-significant result (its interval includes 1 for a "
                                    "ratio, 0 for a difference): write 'did not significantly reduce' or 'may "
-                                   "reduce', or move the verb to the result that is significant."}
+                                   "reduce', or move the verb to the result that is significant. Comparisons "
+                                   "without arms: say which arm had each value ('3.99 in the chlorhexidine "
+                                   "arm vs 3.45 in the control arm')."}
         self.done = True
         return {"accepted": True, "note": "unverified quotes, if any, will be left out of the report"}
 
@@ -653,7 +675,11 @@ class Agent:
         if dropped:
             self.on_event("verify", "trial names not found in their review, left out: "
                           + ", ".join(f"{n} ({label})" for label, n in dropped))
-        return [{"trial": t, "reviews": labels, "of": len(reviews)} for t, labels in shared]
+        # out of every review in the report, not only those that listed trials ("2 of 2" was shown
+        # in a report that had 3 reviews)
+        n_reviews = sum(1 for a in self.final or [] if a.get("included_trials")
+                        or strength(self.store.get_paper(a["paper_id"]) or {}) == "review")
+        return [{"trial": t, "reviews": labels, "of": max(n_reviews, len(reviews))} for t, labels in shared]
 
     def _served(self):
         return ",".join(sorted(m for m in self.served_models if m)) or None

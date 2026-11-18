@@ -206,8 +206,15 @@ def short_journal(name):
 _PDF_HYPHEN = re.compile(r"(?<=[a-z])- (?!(?:and|or|to|nor|vs|versus)\b)(?=[a-z])")
 
 
+def clean_decimals(text):
+    """'3⋅99' (Lancet's middle-dot decimal) -> '3.99' (same rule as numbers.clean_decimals; this file
+    also runs as a stand-alone script, so it cannot import the package)."""
+    return re.sub(r"(?<=\d)[⋅·∙](?=\d)", ".", text or "")
+
+
 def display_quote(text):
-    return _PDF_HYPHEN.sub("", text)
+    """'sig-\\nnificant' -> 'significant', '3⋅99' -> '3.99', PDF line breaks -> spaces."""
+    return _PDF_HYPHEN.sub("", clean_decimals(" ".join(str(text).split())))
 
 
 def md_cell(text):
@@ -228,15 +235,15 @@ def build_report(spec, pdf_dir, out):
     if spec.get("question"):
         md += [f"**{L['question']}:** {spec['question']}", ""]
     if spec.get("bottom_line"):
-        md += [f"> **{L['bottom_line']}:** {spec['bottom_line']}", ""]
+        md += [f"> **{L['bottom_line']}:** {clean_decimals(spec['bottom_line'])}", ""]
     if spec.get("conclusion"):
-        md += [f"## {L['conclusion']}", "", spec["conclusion"], ""]
+        md += [f"## {L['conclusion']}", "", clean_decimals(spec["conclusion"]), ""]
         if spec.get("conclusion_numbers") is not None:
             md += [number_line(L, spec["conclusion_numbers"], "conclusion_numbers", "not_traced"), ""]
         if spec.get("direction_warning"):
             md += [f"> ⚠️ {L['direction_warning']}", ""]
     if spec.get("certainty"):
-        md += [f"**{L['certainty']}:** {spec['certainty']}", ""]
+        md += [f"**{L['certainty']}:** {clean_decimals(spec['certainty'])}", ""]
         if spec.get("certainty_start") in ("high", "low"):
             md += [f"_{L['start_' + spec['certainty_start']]}_", ""]
     failed, read = (spec.get("missing_strong") or [0, 0])
@@ -283,11 +290,11 @@ def build_report(spec, pdf_dir, out):
                              else f"{L['p_' + p]} ⚠️ ({f.get('studied', '')})")
             md.append(f"**{L['fit']}:** {' · '.join(parts)}  ")
         md += ["", f"### {L['findings']}", ""]
-        md += [f"- {b}" for b in a.get("bullets", [])]
+        md += [f"- {clean_decimals(b)}" for b in a.get("bullets", [])]
         if a.get("numbers") is not None:
             md += ["", number_line(L, a["numbers"])]
         if a.get("relevance"):
-            md += ["", f"**{L['relevance']}:** {a['relevance']}"]
+            md += ["", f"**{L['relevance']}:** {clean_decimals(a['relevance'])}"]
         md += ["", f"### {L['quotes']}", ""]
         kept = 0
         for q in a.get("quotes", []):

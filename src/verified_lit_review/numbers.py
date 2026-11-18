@@ -25,6 +25,14 @@ NUM = re.compile(r"(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\w])|(?<![\w.,])\d+
 DECIMAL_COMMA = re.compile(r"(?<![\w.,])(?:\d+,\d{1,2}|0,\d+)(?![\w,])")
 
 
+MID_DOT = re.compile(r"(?<=\d)[⋅·∙](?=\d)")
+
+
+def clean_decimals(text):
+    """'3⋅99' (Lancet's middle-dot decimal) -> '3.99'. Same length, so positions stay valid."""
+    return MID_DOT.sub(".", text or "")
+
+
 def _canon(token):
     return token.replace(",", "")
 
@@ -32,7 +40,7 @@ def _canon(token):
 def extract(text):
     """Meaningful numbers in a piece of text, as canonical strings ('1602', '0.69', '33.8')."""
     out = []
-    for m in NUM.finditer(text or ""):
+    for m in NUM.finditer(clean_decimals(text)):
         s = _canon(m.group())
         value = float(s)
         if "." not in s and (value < 10 or 1900 <= value <= 2100):
@@ -48,6 +56,7 @@ class PaperNumbers:
     def __init__(self, page_texts):
         self.exact = set()
         for t in page_texts:
+            t = clean_decimals(t)
             self.exact.update(_canon(m.group()) for m in NUM.finditer(t or ""))
             self.exact.update(m.group().replace(",", ".") for m in DECIMAL_COMMA.finditer(t or ""))
         self.floats = [float(s) for s in self.exact]
@@ -103,6 +112,7 @@ def _negative(text, start):
 
 def tokens(text):
     """[(canonical, value, negative, position)] for every number printed in `text`."""
+    text = clean_decimals(text)
     out = []
     for m in NUM.finditer(text or ""):
         s = _canon(m.group())
@@ -152,7 +162,7 @@ def check_finding(text, cited_pages, index):
     'not_in_paper', 'not_on_page', 'sign', 'ci_apart'. With no cited pages, the whole paper counts."""
     all_pages = sorted(index.pages)
     scope = [p for p in (cited_pages or []) if p in index.pages] or all_pages
-    text = CI_LABEL.sub(lambda m: " " * len(m.group()), text or "")    # "95% CI" is a label, not a result
+    text = CI_LABEL.sub(lambda m: " " * len(m.group()), clean_decimals(text))   # "95% CI": a label, not a result
     found, problems = [], []
     seen = set()
     for m in NUM.finditer(text or ""):
