@@ -70,6 +70,7 @@ LABELS = {
                start_low="רמת הפתיחה, שנקבעה בקוד לפי סוגי המחקרים: נמוכה (מחקרים תצפיתיים בלבד).",
                auto_review="סקירה שיטתית או מטה-אנליזה שהסוכן בחר לקרוא, אך לא הייתה בגישה פתוחה.",
                auto_trial="ניסוי אקראי שהסוכן בחר לקרוא, אך לא היה בגישה פתוחה.",
+               auto_found="ניסוי מרכזי שנמצא בחיפוש לפי שם המחבר, אך לא נקרא בסקירה הזאת.",
                missing_strong=("**חסרים מחקרים חזקים:** {failed} מתוך {total} המחקרים החזקים שהסוכן ניסה לפתוח "
                                "(סקירות שיטתיות וניסויים אקראיים) לא היו בגישה פתוחה. רמת הוודאות זמנית, "
                                "והמסקנה עלולה להשתנות כשיקראו אותם."),
@@ -117,6 +118,7 @@ LABELS = {
                start_low="Starting level, set in code from the study designs: low (observational studies only).",
                auto_review="A systematic review or meta-analysis the agent chose to read, but it was not open access.",
                auto_trial="A randomized trial the agent chose to read, but it was not open access.",
+               auto_found="A landmark trial found by its first author, but not read for this review.",
                missing_strong=("**Strong studies missing:** {failed} of the {total} strongest studies the agent "
                                "tried to open (systematic reviews, randomized trials) were not open access. The "
                                "certainty is provisional, and the conclusion may change once they are read."),

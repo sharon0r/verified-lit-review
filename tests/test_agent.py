@@ -515,3 +515,22 @@ def test_abstract_without_results_is_refused(setup):
     agent = Agent(store, str(tmp))
     agent.failed = [rev]
     assert "no results" in agent.use_abstract(rev)["error"]
+
+
+def test_overlap_counts_every_review_by_name_and_year_and_an_unread_landmark_trial_is_listed(setup, monkeypatch):
+    from verified_lit_review import agent as agent_mod, fit
+    # overlap: a review whose list is empty still counts, and a trial needs its name AND year nearby
+    texts = {"r1": "We pooled Climo 2013 and Noto 2015.", "r2": "Included: Climo et al. (2013) and Noto 2015.",
+             "r3": "An earlier study (Climo 2009) used another protocol."}
+    shared, _ = fit.overlap([("A", "r1", ["Climo 2013", "Noto 2015"]), ("B", "r2", []), ("C", "r3", [])], texts.get)
+    assert shared == [("Climo 2013", ["A", "B"]), ("Noto 2015", ["A", "B"])]       # Climo 2009 is not Climo 2013
+    # a trial found by first author but never fetched appears in 'could not be opened'
+    store, pid, tmp = setup
+    trial = {"doi": "10.1/climo", "title": "Effect of daily chlorhexidine bathing", "source": "europepmc",
+             "authors": "Climo MW", "year": "2013", "journal": "N Engl J Med"}
+    monkeypatch.setitem(agent_mod.SEARCHERS, "europepmc", lambda q, s, n, **kw: ([trial], "test"))
+    agent = Agent(store, str(tmp))
+    agent.search_papers("chlorhexidine bathing", "europepmc", 3, author="Climo")
+    agent.fetched.add(pid)
+    agent.submit_report([article(pid, [{"page": 1, "text": GOOD}])])
+    assert {"paper_id": "10.1/climo", "why_important": "", "auto": "found"} in agent.not_read

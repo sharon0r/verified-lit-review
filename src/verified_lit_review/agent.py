@@ -266,7 +266,8 @@ class Agent:
         self.on_event("search", f"[{database}] '{query}'" + (f" author={author}" if author else "")
                       + (f" since={min_year}" if min_year else "") + f": {len(papers)} papers ({status})")
         if author:      # a named landmark trial: whether it was found is reported by the code, not the model
-            self.trial_searches.append({"author": author, "query": query, "found": len(papers)})
+            self.trial_searches.append({"author": author, "query": query, "found": len(papers),
+                                        "ids": [self.store.upsert_paper(p) for p in papers]})
         for p in papers:
             self.author_words.update(w.lower() for w in re.findall(r"[^\W\d_]{2,}", p.get("authors") or ""))
         # authors are given so the agent never has to name a paper's authors from memory
@@ -420,6 +421,15 @@ class Agent:
         for pid, kind in self._missing_strong()[0]:
             if pid not in listed and pid not in chosen and len(kept) < MAX_NOT_READ + 2:
                 kept.append({"paper_id": pid, "why_important": "", "auto": kind})
+                listed.add(pid)
+        # a landmark trial found by its first author but never read is listed too (a real run searched
+        # Climo 2013 by author, never fetched it, and left it out of the report)
+        for t in self.trial_searches:
+            pid = (t.get("ids") or [None])[0]
+            unread = pid and (pid not in self.fetched or pid in self.abstract_only)
+            if unread and pid not in listed and pid not in chosen and len(kept) < MAX_NOT_READ + 3:
+                kept.append({"paper_id": pid, "why_important": "", "auto": "found"})
+                listed.add(pid)
         return kept, problems
 
     def _missing_strong(self):
@@ -762,8 +772,10 @@ class Agent:
 
     def _overlap(self):
         """Trials that more than one of the chosen reviews include, each name checked in that review."""
+        # every full-text review, also one whose trial list the agent left empty (its text is still searched)
         reviews = [(short_cite(self.store.get_paper(a["paper_id"]) or {}), a["paper_id"], a.get("included_trials"))
-                   for a in self.final or [] if a.get("included_trials")]
+                   for a in self.final or [] if a["paper_id"] not in self.abstract_only and
+                   (a.get("included_trials") or strength(self.store.get_paper(a["paper_id"]) or {}) == "review")]
 
         def text_of(pid):
             return " ".join(r["text"] for r in self.store.conn.execute(
@@ -772,13 +784,9 @@ class Agent:
         if dropped:
             self.on_event("verify", "trial names not found in their review, left out: "
                           + ", ".join(f"{n} ({label})" for label, n in dropped))
-        # out of every review in the report, not only those that listed trials ("2 of 2" was shown
-        # in a report that had 3 reviews)
-        # a review read from its abstract cannot list its trials, so it is not counted ("3 of 4" was shown
-        # when the fourth review was a Cochrane abstract)
-        n_reviews = sum(1 for a in self.final or [] if a["paper_id"] not in self.abstract_only and
-                        (a.get("included_trials") or strength(self.store.get_paper(a["paper_id"]) or {}) == "review"))
-        return [{"trial": t, "reviews": labels, "of": max(n_reviews, len(reviews))} for t, labels in shared]
+        # out of every full-text review in the report ("2 of 2" was shown with 3 reviews); a review read
+        # from its abstract is not counted ("3 of 4" was shown when the fourth was a Cochrane abstract)
+        return [{"trial": t, "reviews": labels, "of": len(reviews)} for t, labels in shared]
 
     def _served(self):
         return ",".join(sorted(m for m in self.served_models if m)) or None

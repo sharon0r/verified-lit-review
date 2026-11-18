@@ -53,22 +53,47 @@ def trial_key(name):
     return f"{word.lower()} {year.group()}".strip() if year else word.lower()
 
 
+# characters: how close a trial's year must be printed after its first author's name. A reference list
+# prints the year after the title ('Climo MW, Yokoe DS, ... Effect of daily chlorhexidine bathing ... N Engl J
+# Med. 2013'): 150-190 characters in a real meta-analysis, so 120 missed it. Known limit: in a reference
+# list, the next entry's year can fall inside the window.
+NEAR = 250
+
+
+def mentions(text, key):
+    """Does `text` name this trial: the first author's surname with the year printed near it
+    ('Climo et al. (2013)', 'Climo MW, ... 2013'), or the acronym when the key has no year."""
+    word, _, year = key.partition(" ")
+    if not word:
+        return False
+    low = (text or "").lower()
+    for m in re.finditer(re.escape(word), low):
+        if not year or year in low[max(0, m.start() - 20):m.end() + NEAR]:
+            return True
+    return False
+
+
 def overlap(reviews, text_of):
-    """reviews: [(label, paper_id, [trial names])]; text_of(paper_id) -> the paper's full text.
+    """reviews: [(label, paper_id, [trial names it lists])], every full-text review in the report, also
+    those that listed nothing; text_of(paper_id) -> the review's full text.
+
+    Every trial that some review lists (and whose name and year its own text contains) is looked for in
+    EVERY review, by name and year: a review whose list the agent left empty still counts. A real report
+    showed 'Climo 2013 in 2 of 4' although a third review discussed it.
     Returns (shared, dropped): shared = [(trial, [labels])] for trials in 2+ reviews, most shared first;
-    dropped = [(label, name)] names that the review's own text does not contain."""
-    seen, shown, dropped = {}, {}, []
+    dropped = [(label, name)] names that the listing review's own text does not contain."""
+    texts = {pid: text_of(pid) or "" for _, pid, _ in reviews}
+    trials, dropped = {}, []
     for label, pid, names in reviews:
-        text = (text_of(pid) or "").lower()
         for name in names or []:
             key = trial_key(name)
-            word = key.split(" ")[0]
-            if not word or word not in text:
+            if mentions(texts[pid], key):
+                trials.setdefault(key, name.strip())
+            else:
                 dropped.append((label, name))
-                continue
-            if label not in seen.setdefault(key, []):
-                seen[key].append(label)
-                shown.setdefault(key, name.strip())
-    shared = sorted(((shown[k], labels) for k, labels in seen.items() if len(labels) > 1),
-                    key=lambda x: (-len(x[1]), x[0]))
-    return shared, dropped
+    shared = []
+    for key, shown in trials.items():
+        labels = [label for label, pid, _ in reviews if mentions(texts[pid], key)]
+        if len(labels) > 1:
+            shared.append((shown, labels))
+    return sorted(shared, key=lambda x: (-len(x[1]), x[0])), dropped
