@@ -504,3 +504,14 @@ def test_model_sees_a_window_around_the_query_but_quotes_are_checked_on_the_full
     # a sentence far outside the window the model saw is still verified against the full page text
     far = "Background text about other topics. Background text about other topics."
     assert agent.verify_quote(pid, 1, far)["verified"] is True
+
+
+def test_abstract_without_results_is_refused(setup):
+    store, pid, tmp = setup
+    rev = store.upsert_paper({"doi": "10.1/cochrane", "source": "pubmed", "title": "Bathing: a Cochrane review",
+                              "abstract": "Background: infections are common in intensive care. Objectives: to assess "
+                                          "the effect of bathing on infection. Search methods: we searched databases. "
+                                          "Selection criteria: randomised trials of adults in intensive care units."})
+    agent = Agent(store, str(tmp))
+    agent.failed = [rev]
+    assert "no results" in agent.use_abstract(rev)["error"]

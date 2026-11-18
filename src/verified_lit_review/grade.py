@@ -65,11 +65,23 @@ def rated_level(certainty):
     return next(level for level, w in LEVEL_WORDS if re.fullmatch(w, word, re.IGNORECASE))
 
 
+# "starting level low", "רמת הפתיחה נמוכה", "started from high": the model stating its own start. A real
+# education report said "רמת פתיחה נמוכה" while the code had set high from a randomized trial.
+START_CLAIM = re.compile(r"(?:starting level|start(?:s|ed)?(?: at| from| as)?|רמת (?:ה)?פתיחה|מתחיל(?:ה|ות)? (?:מ|ב))"
+                         r"\W{0,4}(very low|low|moderate|high|נמוכה מאוד|נמוכה|בינונית|גבוהה)", re.IGNORECASE)
+
+
 def check(certainty, designs):
     """Returns (start, problem): problem is None when the rating is explained."""
     start = start_level(designs)
     if start is None or not (certainty or "").strip():
         return start, None
+    for m in START_CLAIM.finditer(certainty):
+        said = next(level for level, w in LEVEL_WORDS if re.fullmatch(w, m.group(1), re.IGNORECASE))
+        if said != start:
+            return start, (f"`certainty` says the evidence starts at {said}, but the starting level is {start}, "
+                           "set in code from the designs (randomized evidence: high). Do not state a starting "
+                           "level; give the final level and one reason per level down from it")
     level = rated_level(certainty)
     if level is None:
         return start, ("start `certainty` with the level (high / moderate / low / very low; in Hebrew "

@@ -35,3 +35,12 @@ def test_rating_above_the_start_needs_an_upgrade_reason():
     assert grade.check("Moderate: upgraded for a large effect (RR 0.2).", obs)[1] is None
     assert grade.check("Low: observational studies only.", obs)[1] is None
     assert grade.check("Moderate.", [None])[1] is None            # designs not recognised: not checked
+
+
+def test_certainty_may_not_state_a_starting_level_that_contradicts_the_code():
+    rct = ["randomized"]
+    # the real education report: randomized trial chosen (start high) but the text said it started low
+    assert "starts at low" in grade.check("נמוכה: רמת פתיחה נמוכה, ובנוסף סיכון להטיה וחוסר דיוק.", rct)[1]
+    assert "starts at low" in grade.check("Low: the evidence started from low (observational).", rct)[1]
+    assert grade.check("Low: starting level high, minus risk of bias and imprecision.", rct)[1] is None
+    assert grade.check("נמוכה: הורדה בשל סיכון להטיה ובשל חוסר דיוק.", rct)[1] is None

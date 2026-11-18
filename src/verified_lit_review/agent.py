@@ -300,6 +300,10 @@ class Agent:
         abstract = ((self.store.get_paper(paper_id) or {}).get("abstract") or "").strip()
         if len(abstract) < MIN_ABSTRACT_CHARS:
             return {"error": "this paper has no usable abstract; list it in not_read instead"}
+        # an abstract without results adds nothing (a real Cochrane abstract stopped before its results)
+        if len(numbers.extract(abstract)) < 2:
+            return {"error": "this abstract reports no results (fewer than 2 result numbers); list the paper "
+                             "in not_read instead"}
         self.store.add_abstract(paper_id, abstract)
         self.abstract_only.add(paper_id)
         self.fetched.add(paper_id)
@@ -770,8 +774,10 @@ class Agent:
                           + ", ".join(f"{n} ({label})" for label, n in dropped))
         # out of every review in the report, not only those that listed trials ("2 of 2" was shown
         # in a report that had 3 reviews)
-        n_reviews = sum(1 for a in self.final or [] if a.get("included_trials")
-                        or strength(self.store.get_paper(a["paper_id"]) or {}) == "review")
+        # a review read from its abstract cannot list its trials, so it is not counted ("3 of 4" was shown
+        # when the fourth review was a Cochrane abstract)
+        n_reviews = sum(1 for a in self.final or [] if a["paper_id"] not in self.abstract_only and
+                        (a.get("included_trials") or strength(self.store.get_paper(a["paper_id"]) or {}) == "review"))
         return [{"trial": t, "reviews": labels, "of": max(n_reviews, len(reviews))} for t, labels in shared]
 
     def _served(self):
