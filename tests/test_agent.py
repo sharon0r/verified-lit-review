@@ -149,7 +149,7 @@ def test_search_budget_ends_the_search_phase(setup, monkeypatch):
     from verified_lit_review import agent as agent_mod
     store, pid, tmp = setup
     searched = []
-    monkeypatch.setitem(agent_mod.SEARCHERS, "openalex", lambda q, s, n: (searched.append(q) or [], "test"))
+    monkeypatch.setitem(agent_mod.SEARCHERS, "openalex", lambda q, s, n, **kw: (searched.append(q) or [], "test"))
     turns = [reply(tool_call("search_papers", query=f"q{i}", database="openalex", n=5))
              for i in range(agent_mod.MAX_SEARCH_TURNS + 1)]
     client = FakeClient(turns + [reply(tool_call("fetch_paper", paper_id=pid)),
@@ -473,3 +473,17 @@ def test_review_without_included_trials_can_be_fixed_with_a_small_edit(setup):
     ok = agent.fix_report([{"field": "included_trials", "paper_id": review, "index": 0, "page": 0,
                             "text": "Climo 2013; Noto 2015"}])
     assert ok["accepted"] is True and agent.final[1]["included_trials"] == ["Climo 2013", "Noto 2015"]
+
+
+def test_named_trial_not_found_is_reported_by_the_code_and_has_its_own_budget(setup, monkeypatch):
+    from verified_lit_review import agent as agent_mod
+    store, pid, tmp = setup
+    monkeypatch.setitem(agent_mod.SEARCHERS, "europepmc", lambda q, s, n, **kw: ([], "test"))
+    agent = Agent(store, str(tmp))
+    agent.search_turns = agent_mod.MAX_SEARCH_TURNS + 1            # topic searches used up
+    assert "error" in agent.search_papers("chlorhexidine", "europepmc", 5)
+    assert agent.search_papers("chlorhexidine bathing", "europepmc", 5, author="Climo") == []
+    agent.fetched.add(pid)
+    agent.submit_report([article(pid, [{"page": 1, "text": GOOD}])])
+    agent._write_report(store.start_run("q"), "q", "en", str(tmp / "r.md"), 1.0)
+    assert "**Searched by first author and not found:** Climo" in (tmp / "r.md").read_text(encoding="utf-8")

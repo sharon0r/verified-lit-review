@@ -55,6 +55,7 @@ LABELS = {
                r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
                abstract_only="מתוך התקציר בלבד: לא אומת מול טקסט מלא. לא נכלל במספרי המסקנה ובקביעת הוודאות.",
                abstract_short="תקציר בלבד", abstract_loc="תקציר",
+               trials_not_found="**חיפשנו לפי שם המחבר, ולא נמצאו:**",
                references="מקורות (בסגנון Vancouver)",
                references_note="_המאמרים שנקראו, ואחריהם המאמרים שלא ניתן היה לפתוח. יש להשלים כרך ועמודים לפני הגשה._",
                trust_ok="**נבדק בקוד:** {q} ציטוטים ו-{n} מספרים נבדקו מול המאמרים, וכולם נמצאו.",
@@ -101,6 +102,7 @@ LABELS = {
                abstract_only=("From the abstract only: not checked against the full text. Not used for the "
                               "conclusion's numbers or the certainty rating."),
                abstract_short="abstract only", abstract_loc="abstract",
+               trials_not_found="**Searched by first author and not found:**",
                references="References (Vancouver style)",
                references_note="_Papers read, then papers that could not be opened. Add volume and pages before submission._",
                trust_ok="**Checked in code:** {q} quotes and {n} numbers were checked against the papers, and all were found.",
@@ -320,11 +322,13 @@ def build_report(spec, pdf_dir, out):
                   + (f" · {short_journal(a['journal'])}" if a.get("journal") else "")
                   + (f" · 📄 {L['abstract_short']}" if a.get("abstract_only") else ""))
     md.append("")
-    if spec.get("not_read"):
+    if spec.get("not_read") or spec.get("trials_not_found"):
         md += [f"## {L['not_read']}", "", L["not_read_note"], ""]
         for n in spec["not_read"]:
             why = n.get("why_important") or L.get(f"auto_{n.get('auto')}", "")
             md.append(f"- {linked_title(n)} ({short_cite(n)}) — **{L['why_important']}:** {why}")
+        if spec.get("trials_not_found"):
+            md.append(f"- {L['trials_not_found']} {', '.join(spec['trials_not_found'])}")
         md.append("")
 
     ok_n, rejected = 0, []

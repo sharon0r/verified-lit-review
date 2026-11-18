@@ -230,3 +230,11 @@ def test_pubmed_search_two_calls_then_cache(store, fake):
     assert (s1, s2) == ("network", "cache") and len(session.calls) == 2
     assert session.calls[0][1]["params"]["tool"] == "verified-lit-review"
     assert store.get_paper("10.1002/14651858.CD003331.pub6")["pmcid"] == "PMC10849021"
+
+
+def test_author_search_finds_closed_trials_and_year_floor_is_applied():
+    q = sources.europepmc_query("chlorhexidine bathing", author="Climo", min_year=2021)
+    assert 'AUTH:"Climo"' in q and "PUB_YEAR:[2021 TO 3000]" in q
+    assert "OPEN_ACCESS:y" not in q and "SRC:PPR" in q       # a closed trial is found, preprints still not
+    assert "OPEN_ACCESS:y" in sources.europepmc_query("chlorhexidine bathing")
+    assert "Noto[au]" in sources.pubmed_term("chlorhexidine", author="Noto")

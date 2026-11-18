@@ -33,7 +33,8 @@ OPENALEX_FIELDS = ("id,doi,display_name,type,authorships,publication_year,primar
 #   Europe PMC: open access, no preprints (SRC:PPR), no retracted publications.
 OPENALEX_FILTER = ("open_access.is_oa:true,type:article|review,primary_location.source.type:journal,"
                    "is_retracted:false,primary_location.source.is_core:true")
-EPMC_FILTER = 'OPEN_ACCESS:y AND NOT SRC:PPR AND NOT PUB_TYPE:"retracted publication"'
+EPMC_QUALITY = 'NOT SRC:PPR AND NOT PUB_TYPE:"retracted publication"'
+EPMC_FILTER = "OPEN_ACCESS:y AND " + EPMC_QUALITY
 
 STOP = {"the", "and", "of", "in", "on", "for", "to", "a", "an", "with", "versus", "vs", "is", "are",
         "does", "do", "can", "what", "which", "how", "effect", "effects", "impact", "role", "study",
@@ -107,11 +108,21 @@ def keywords(question):
     return [w for w in re.findall(r"[A-Za-z][\w-]+", question) if w.lower() not in STOP]
 
 
-def europepmc_query(question):
+def europepmc_query(question, author=None, min_year=0):
+    """Title/abstract words, optionally a first author and a publication year floor.
+
+    A search by author looks for a named landmark trial; it is not limited to open access, so a trial
+    that exists but cannot be downloaded is found and can be listed as 'could not be opened' with its
+    real record and link, instead of being silently absent."""
     words = keywords(question)
-    if not words:
+    if not words and not author:
         raise ValueError("the question has no searchable English keywords")
-    return " AND ".join(f'TITLE_ABS:"{w}"' for w in words) + " AND " + EPMC_FILTER
+    parts = [f'TITLE_ABS:"{w}"' for w in words]
+    if author:
+        parts.append(f'AUTH:"{author.strip()}"')
+    if min_year:
+        parts.append(f"PUB_YEAR:[{int(min_year)} TO 3000]")
+    return " AND ".join(parts) + " AND " + (EPMC_QUALITY if author else EPMC_FILTER)
 
 
 def _clean(text):
@@ -145,13 +156,13 @@ def parse_europepmc(data):
     return out
 
 
-def search_europepmc(question, store, n=10, max_age_days=30, raw_query=None):
+def search_europepmc(question, store, n=10, max_age_days=30, raw_query=None, author=None, min_year=0):
     """Search Europe PMC (open-access papers only). Returns (papers, status).
 
     status is 'cache', 'network' or 'cache (stale, offline)'. Raises SourceError only when the
     network fails and there is no cached answer at all.
     """
-    q = raw_query or europepmc_query(question)
+    q = raw_query or europepmc_query(question, author, min_year)
     key = f"{q}|n={n}"
     cached = store.get_cached_search("europepmc", key, max_age_days)
     if cached is not None:
@@ -209,14 +220,16 @@ def parse_openalex(data):
     return out
 
 
-def search_openalex(question, store, n=10, max_age_days=30):
-    """Search OpenAlex (all disciplines, open-access works only). Returns (papers, status)."""
+def search_openalex(question, store, n=10, max_age_days=30, author=None, min_year=0):
+    """Search OpenAlex (all disciplines, open-access works only). Returns (papers, status).
+    author is not used here (OpenAlex needs an author id); min_year limits the publication year."""
     q = " ".join(keywords(question)) or question
-    key = f"{q}|n={n}"
+    key = f"{q}|n={n}" + (f"|since={int(min_year)}" if min_year else "")
     cached = store.get_cached_search("openalex", key, max_age_days)
     if cached is not None:
         return cached, "cache"
-    params = {"search": q, "filter": OPENALEX_FILTER, "per-page": n, "select": OPENALEX_FIELDS}
+    flt = OPENALEX_FILTER + (f",publication_year:>{int(min_year) - 1}" if min_year else "")
+    params = {"search": q, "filter": flt, "per-page": n, "select": OPENALEX_FIELDS}
     if os.environ.get("OPENALEX_API_KEY"):
         # free key: about 1,000 searches a day instead of about 100 per IP address without one,
         # and a cloud host's IP address is shared with other apps
@@ -246,12 +259,13 @@ PUBMED_FETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 REVIEWS_YEARS = 10
 
 
-def pubmed_term(question):
+def pubmed_term(question, author=None, min_year=0):
     words = keywords(question)
-    if not words:
+    if not words and not author:
         raise ValueError("the question has no searchable English keywords")
-    since = time.gmtime().tm_year - REVIEWS_YEARS
-    return (" ".join(words) + " AND (systematic review[pt] OR meta-analysis[pt]) AND free full text[sb]"
+    since = max(time.gmtime().tm_year - REVIEWS_YEARS, int(min_year or 0))
+    return (" ".join(words) + (f" AND {author.strip()}[au]" if author else "")
+            + " AND (systematic review[pt] OR meta-analysis[pt]) AND free full text[sb]"
             f" AND {since}:3000[dp] NOT retracted publication[pt]")
 
 
@@ -280,9 +294,9 @@ def parse_pubmed_xml(xml_text):
     return out
 
 
-def search_pubmed_reviews(question, store, n=10, max_age_days=30):
+def search_pubmed_reviews(question, store, n=10, max_age_days=30, author=None, min_year=0):
     """Recent systematic reviews / meta-analyses with free full text, from PubMed (NCBI E-utilities)."""
-    term = pubmed_term(question)
+    term = pubmed_term(question, author, min_year)
     key = f"{term}|n={n}"
     cached = store.get_cached_search("pubmed", key, max_age_days)
     if cached is not None:

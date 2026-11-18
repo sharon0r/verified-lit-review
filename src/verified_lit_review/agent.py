@@ -45,6 +45,7 @@ PAGE_CHARS = 4000
 # Every turn re-sends the whole conversation, so turns cost both time and money. Measured runs spent
 # up to 10 turns searching again after failed downloads; the code now ends the search phase.
 MAX_SEARCH_TURNS = 3
+MAX_TRIAL_SEARCHES = 4     # searches for a named landmark trial by first author, outside the budget above
 ABSTRACT_CHARS = 800
 # "Woodend and colleagues", "Smith et al.", "Smith ועמיתיה", "(Smith, 2016)": a name used to cite a paper.
 # A hospital reviewer found an invented author name in a conclusion; numbers were checked, names were not.
@@ -143,7 +144,14 @@ TOOLS = [
                     "sciences, engineering, ...). Use English keywords.",
      "input_schema": _schema({"query": {"type": "string"},
                               "database": {"type": "string", "enum": ["pubmed_reviews", "europepmc", "openalex"]},
-                              "n": {"type": "integer", "description": "results, 1-15"}})},
+                              "n": {"type": "integer", "description": "results, 1-15"},
+                              "author": {"type": "string",
+                                         "description": "first author's surname to find a named landmark "
+                                                        "trial (europepmc; not limited to open access, so a "
+                                                        "closed trial is found and can be listed); else empty"},
+                              "min_year": {"type": "integer",
+                                           "description": "earliest publication year, e.g. 5 years ago to "
+                                                          "find newer syntheses; 0 for no limit"}})},
     {"name": "fetch_paper", "strict": True,
      "description": "Download a paper's open-access PDF and index its pages. Call before reading it. "
                     "About a third of downloads fail (publishers block them): in the same turn, fetch "
@@ -201,6 +209,7 @@ class Agent:
         self.fetched, self.submissions, self.final, self.done = set(), 0, None, False
         self.failed = []           # papers the agent chose to fetch but no open PDF could be downloaded
         self.abstract_only = set() # of those, papers used from their abstract (use_abstract)
+        self.trial_searches = []   # searches for a named trial by first author, with how many were found
         self.search_turns = 0
         self.author_words = set()  # every word of every author list the searches returned
         self.usage = {"input_tokens": 0, "output_tokens": 0,
@@ -217,13 +226,22 @@ class Agent:
         return self._client
 
     # ------------------------------------------------------------------ tools
-    def search_papers(self, query, database="openalex", n=8):
-        if self.search_turns > MAX_SEARCH_TURNS:
+    def search_papers(self, query, database="openalex", n=8, author="", min_year=0):
+        author = (author or "").strip()
+        # a named-trial search comes after reading the reviews, when the topic searches are used up:
+        # it has its own small budget instead
+        if author and len(self.trial_searches) >= MAX_TRIAL_SEARCHES:
+            return {"error": f"at most {MAX_TRIAL_SEARCHES} searches by author; choose from what you have"}
+        if not author and self.search_turns > MAX_SEARCH_TURNS:
             return {"error": f"search budget used ({MAX_SEARCH_TURNS} search turns). Choose from the "
                              "candidates you already have; review fewer papers if no direct one is left."}
         search = SEARCHERS.get(database, SEARCHERS["openalex"])
-        papers, status = search(query, self.store, n=max(1, min(int(n), 15)))
-        self.on_event("search", f"[{database}] '{query}': {len(papers)} papers ({status})")
+        papers, status = search(query, self.store, n=max(1, min(int(n), 15)), author=author or None,
+                                min_year=int(min_year or 0))
+        self.on_event("search", f"[{database}] '{query}'" + (f" author={author}" if author else "")
+                      + (f" since={min_year}" if min_year else "") + f": {len(papers)} papers ({status})")
+        if author:      # a named landmark trial: whether it was found is reported by the code, not the model
+            self.trial_searches.append({"author": author, "query": query, "found": len(papers)})
         for p in papers:
             self.author_words.update(w.lower() for w in re.findall(r"[^\W\d_]{2,}", p.get("authors") or ""))
         # authors are given so the agent never has to name a paper's authors from memory
@@ -625,7 +643,7 @@ class Agent:
                     continue
                 if not calls:
                     break
-                if any(c.name == "search_papers" for c in calls):
+                if any(c.name == "search_papers" and not (c.input or {}).get("author") for c in calls):
                     self.search_turns += 1
                 results, t_tools = [], time.time()
                 for call in calls:
@@ -689,6 +707,9 @@ class Agent:
                 "direction_warning": bool(getattr(self, "direction_warnings", [])),
                 "certainty_start": getattr(self, "certainty_start", None),
                 "overlap": self._overlap(),
+                # named trials searched by first author and not found at all: listed by the code
+                "trials_not_found": sorted({t["author"] for t in self.trial_searches if not t["found"]}
+                                           - {t["author"] for t in self.trial_searches if t["found"]}),
                 "bottom_line": getattr(self, "bottom_line", ""),
                 "not_read": [{"title": p["title"], "authors": p.get("authors"), "year": p.get("year"),
                               "journal": p.get("journal"), "doi": p.get("doi"), "pmcid": p.get("pmcid"),
