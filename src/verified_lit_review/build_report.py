@@ -53,6 +53,9 @@ LABELS = {
                numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא עברו בדיקה",
                r_not_in_paper="לא מופיע במאמר", r_not_on_page="לא בעמוד שצוין",
                r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
+               trust_ok="**נבדק בקוד:** {q} ציטוטים ו-{n} מספרים נבדקו מול המאמרים, וכולם נמצאו.",
+               trust_some=("**נבדק בקוד:** {q_ok} מתוך {q} ציטוטים ו-{n_ok} מתוך {n} מספרים נמצאו במאמרים. "
+                           "מה שלא נמצא מסומן ⚠️ בדוח."),
                fit="התאמה לשאלה", p_population="אוכלוסייה", p_intervention="התערבות",
                p_comparison="השוואה", p_outcome="תוצאה",
                overlap="חפיפה בין הסקירות",
@@ -91,6 +94,9 @@ LABELS = {
                numbers="Numbers checked against the paper", found="found", not_found="failed the check",
                r_not_in_paper="not in the paper", r_not_on_page="not on the cited page",
                r_sign="sign differs from the paper", r_ci_apart="estimate and interval not printed together",
+               trust_ok="**Checked in code:** {q} quotes and {n} numbers were checked against the papers, and all were found.",
+               trust_some=("**Checked in code:** {q_ok} of {q} quotes and {n_ok} of {n} numbers were found in the "
+                           "papers. Anything not found is marked ⚠️ in the report."),
                fit="Fit to the question", p_population="population", p_intervention="intervention",
                p_comparison="comparison", p_outcome="outcome",
                overlap="Overlap between the reviews",
@@ -159,6 +165,22 @@ def number_line(L, result, label="numbers", missing="not_found"):
     why = result.get("reasons", {})
     shown = [f"{n} ({L['r_' + why[n]]})" if why.get(n) in REASONS else n for n in bad]
     return line + (f" · ⚠️ **{L[missing]}:** {', '.join(shown)}" if bad else " ✅")
+
+
+def shorten(text, limit):
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def trust_line(L, quotes_ok, quotes, arts, spec):
+    """One line under the bottom line: what the code checked and whether everything was found
+    (UX review: eleven per-paper check lines were not read; one line is)."""
+    results = [a.get("numbers") or {} for a in arts] + [spec.get("conclusion_numbers") or {}]
+    n_ok = sum(len(r.get("verified", [])) for r in results)
+    n_all = n_ok + sum(len(r.get("unverified", [])) for r in results)
+    if quotes_ok == quotes and n_ok == n_all:
+        return f"> ✅ {L['trust_ok'].format(q=quotes, n=n_all)}"
+    return f"> ⚠️ {L['trust_some'].format(q_ok=quotes_ok, q=quotes, n_ok=n_ok, n=n_all)}"
 
 
 def paper_url(a):
@@ -236,16 +258,15 @@ def build_report(spec, pdf_dir, out):
         md += [f"**{L['question']}:** {spec['question']}", ""]
     if spec.get("bottom_line"):
         md += [f"> **{L['bottom_line']}:** {clean_decimals(spec['bottom_line'])}", ""]
+    banner_at = len(md)                 # one trust line, filled in once every quote has been checked
     if spec.get("conclusion"):
         md += [f"## {L['conclusion']}", "", clean_decimals(spec["conclusion"]), ""]
-        if spec.get("conclusion_numbers") is not None:
+        if (spec.get("conclusion_numbers") or {}).get("unverified"):
             md += [number_line(L, spec["conclusion_numbers"], "conclusion_numbers", "not_traced"), ""]
         if spec.get("direction_warning"):
             md += [f"> ⚠️ {L['direction_warning']}", ""]
     if spec.get("certainty"):
         md += [f"**{L['certainty']}:** {clean_decimals(spec['certainty'])}", ""]
-        if spec.get("certainty_start") in ("high", "low"):
-            md += [f"_{L['start_' + spec['certainty_start']]}_", ""]
     failed, read = (spec.get("missing_strong") or [0, 0])
     if failed > read:
         md += [f"> ⚠️ {L['missing_strong'].format(failed=failed, total=failed + read)}", ""]
@@ -254,12 +275,6 @@ def build_report(spec, pdf_dir, out):
         md.append(f"{i}. **{a.get('topic', '')}** — {cite_link(a)}"
                   + (f" · {short_journal(a['journal'])}" if a.get("journal") else ""))
     md.append("")
-    if spec.get("overlap"):
-        md += [f"## {L['overlap']}", "", L["overlap_note"], ""]
-        for o in spec["overlap"]:
-            md.append(f"- **{o['trial']}:** " + L["overlap_item"].format(n=len(o["reviews"]), of=o["of"])
-                      + f" ({'; '.join(o['reviews'])})")
-        md.append("")
     if spec.get("not_read"):
         md += [f"## {L['not_read']}", "", L["not_read_note"], ""]
         for n in spec["not_read"]:
@@ -282,16 +297,15 @@ def build_report(spec, pdf_dir, out):
             md.append(f"**{L['type']}:** {a['study_type']}  ")
         if a.get("why_chosen"):
             md.append(f"**{L['why']}:** {a['why_chosen']}  ")
-        if a.get("pico_fit"):
-            parts = []
-            for p in ("population", "intervention", "comparison", "outcome"):
-                f = a["pico_fit"].get(p) or {}
-                parts.append(f"{L['p_' + p]} ✅" if f.get("match", True)
-                             else f"{L['p_' + p]} ⚠️ ({f.get('studied', '')})")
-            md.append(f"**{L['fit']}:** {' · '.join(parts)}  ")
+        misfit = [(p, (a.get("pico_fit") or {}).get(p) or {}) for p in ("population", "intervention",
+                                                                       "comparison", "outcome")]
+        misfit = [(p, f) for p, f in misfit if not f.get("match", True)]
+        if misfit:                      # only what does not fit the question, in a few words
+            md.append(f"**{L['fit']}:** " + " · ".join(
+                f"⚠️ {L['p_' + p]}: {shorten(f.get('studied', ''), 45)}" for p, f in misfit) + "  ")
         md += ["", f"### {L['findings']}", ""]
         md += [f"- {clean_decimals(b)}" for b in a.get("bullets", [])]
-        if a.get("numbers") is not None:
+        if (a.get("numbers") or {}).get("unverified"):
             md += ["", number_line(L, a["numbers"])]
         if a.get("relevance"):
             md += ["", f"**{L['relevance']}:** {clean_decimals(a['relevance'])}"]
@@ -317,8 +331,18 @@ def build_report(spec, pdf_dir, out):
             md += ["_(—)_", ""]
         md += ["---", ""]
 
-    md += [f"## {L['how']}", "", L["summary"].format(ok=ok_n, bad=len(rejected)), "",
-           L["note"], "", L["scope"].format(n=len(arts)), ""]
+    md += [f"## {L['how']}", "", L["summary"].format(ok=ok_n, bad=len(rejected)), ""]
+    if spec.get("overlap"):
+        md += [f"**{L['overlap']}** — {L['overlap_note']}", ""]
+        for o in spec["overlap"]:
+            md.append(f"- **{o['trial']}:** " + L["overlap_item"].format(n=len(o["reviews"]), of=o["of"])
+                      + f" ({'; '.join(o['reviews'])})")
+        md.append("")
+    if spec.get("certainty_start") in ("high", "low"):
+        md += [f"_{L['start_' + spec['certainty_start']]}_", ""]
+    md += [L["note"], "", L["scope"].format(n=len(arts)), ""]
+    if spec.get("bottom_line"):
+        md[banner_at:banner_at] = [trust_line(L, ok_n, ok_n + len(rejected), arts, spec), ""]
     if spec.get("pico"):
         md += [f"**PICO:** {spec['pico']}", ""]
     with open(out, "w", encoding="utf-8") as f:

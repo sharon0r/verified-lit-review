@@ -412,3 +412,16 @@ def test_certainty_two_levels_down_with_one_reason_is_sent_back(setup):
     ok = agent.fix_report([{"field": "certainty", "paper_id": "", "index": 0, "page": 0,
                             "text": "Low: risk of bias (no blinding) and imprecision (a single small trial)."}])
     assert ok["accepted"] is True
+
+
+def test_one_trust_line_replaces_the_per_paper_check_lines_when_all_is_found(setup):
+    store, pid, tmp = setup
+    art = article(pid, [{"page": 1, "text": GOOD}])
+    client = FakeClient([reply(tool_call("fetch_paper", paper_id=pid)),
+                         reply(tool_call("submit_report", articles=[art], bottom_line="Calls may help.",
+                                         conclusion="", pico="", certainty="", not_read=[]))])
+    Agent(store, str(tmp), client=client).run("q", n_papers=1, language="en", out_path=str(tmp / "r.md"))
+    report = (tmp / "r.md").read_text(encoding="utf-8")
+    assert "✅ **Checked in code:** 1 quotes and 3 numbers were checked against the papers, and all were found." in report
+    assert report.index("Checked in code") < report.index("## Papers in this review")
+    assert "Numbers checked against the paper" not in report          # shown only when a number fails
