@@ -18,8 +18,8 @@ import os
 import re
 import time
 
-from . import claims, grade, numbers
-from .build_report import MIN_QUOTE_CHARS, build_report, norm
+from . import claims, fit, grade, numbers
+from .build_report import MIN_QUOTE_CHARS, build_report, norm, short_cite
 from .db import Store, paper_key
 from .fetch import fetch_paper
 from .sources import SEARCHERS, SourceError
@@ -95,6 +95,9 @@ BULLET = _schema({
               "description": "the PDF page(s) this finding's numbers are printed on, as retrieve_passages "
                              "returned them; every number is checked on these pages"},
 })
+FIT = _schema({"match": {"type": "boolean"},
+               "studied": {"type": "string", "description": "what the paper studied, in a few words"}})
+PICO_FIT = _schema({"population": FIT, "intervention": FIT, "comparison": FIT, "outcome": FIT})
 ARTICLE = _schema({
     "paper_id": {"type": "string"},
     "topic": {"type": "string", "description": "the sub-topic this paper answers"},
@@ -103,6 +106,11 @@ ARTICLE = _schema({
                    "description": "one sentence: why this paper was selected over the other candidates "
                                   "(design strength, directness, recency, population)"},
     "bullets": {"type": "array", "items": BULLET},
+    "pico_fit": PICO_FIT,
+    "included_trials": {"type": "array", "items": {"type": "string"},
+                        "description": "for a review or meta-analysis: the primary trials it includes, as "
+                                       "'first author year' or acronym exactly as the paper names them "
+                                       "(e.g. 'Climo 2013', 'CLEAN-IT'); empty for a primary study"},
     "relevance": {"type": "string", "description": "how it answers the question + its limits"},
     "quotes": {"type": "array", "items": QUOTE},
 })
@@ -436,6 +444,11 @@ class Agent:
         too_long = (self._length_check(conclusion, bottom_line)
                     + self._certainty_verb_check(certainty, conclusion, bottom_line))
         provisional = self._provisional_check(certainty)
+        # fit to the question: children in an adult question, and mismatches named as indirectness
+        texts = {a["paper_id"]: " ".join([(self.store.get_paper(a["paper_id"]) or {}).get("title", ""),
+                                          a.get("study_type", "")] + [b["text"] for b in bullets_of(a)])
+                 for a in articles}
+        pico = fit.pico_problems(articles, getattr(self, "question", ""), certainty, texts)
         # GRADE start from the designs in code; every level down (or up) must be explained
         designs = [grade.design(f"{(self.store.get_paper(a['paper_id']) or {}).get('title', '')} "
                                 f"{a.get('study_type', '')}") for a in articles]
@@ -453,7 +466,7 @@ class Agent:
         total = sum(len(a["quotes"]) for a in articles)
         n_bad = sum(len(w["numbers_not_in_paper"]) for w in number_warnings)
         retry = ((failures or number_warnings or bad_names or not_read_numbers or too_long or overclaimed
-                  or provisional or grade_problem) and self.submissions < MAX_SUBMITS)
+                  or provisional or grade_problem or pico) and self.submissions < MAX_SUBMITS)
         self.on_event("verify", f"submission {self.submissions}: {total - len(failures)}/{total} quotes verified"
                       + (f", {n_bad} number(s) failed the check" if n_bad else "")
                       + (f", author name(s) not in any paper: {', '.join(bad_names)}" if bad_names else "")
@@ -462,6 +475,7 @@ class Agent:
                       + (", warning: opposite directions not acknowledged" if self.direction_warnings else "")
                       + (", certainty must say provisional (most strong studies unread)" if provisional else "")
                       + (", certainty rating not explained against its start" if grade_problem else "")
+                      + (f", {len(pico)} PICO fit problem(s)" if pico else "")
                       + (" - sent back to the agent for a quick fix" if retry else ""))
         self.final = articles
         if retry:
@@ -469,6 +483,7 @@ class Agent:
                     "author_names_not_found": bad_names, "not_read_with_numbers": not_read_numbers,
                     "too_long": too_long, "effect_claimed_on_non_significant_result": overclaimed,
                     "certainty_must_be_provisional": provisional, "certainty_rating": grade_problem,
+                    "pico_fit": pico,
                     "instruction": "Call fix_report with edits for only these items; do not resubmit the whole "
                                    "report. Quotes: copy exactly from retrieved pages, or remove them. Numbers "
                                    "not found in the paper: use the exact value the paper prints, or remove it; "
@@ -508,6 +523,7 @@ class Agent:
 
     def run(self, question, n_papers=3, language="he", out_path="Research_Summary_Report.md"):
         run_id = self.store.start_run(question, self.model)
+        self.question = question
         system = open(PROMPT, encoding="utf-8").read()
         lang = {"he": "Hebrew", "en": "English"}.get(language, language)
         messages = [{"role": "user", "content":
@@ -586,6 +602,7 @@ class Agent:
                          "year": p.get("year"), "journal": p.get("journal"), "doi": p.get("doi"),
                          "pmcid": p.get("pmcid"), "topic": a["topic"], "study_type": a["study_type"],
                          "bullets": [b["text"] for b in bullets_of(a)],
+                         "pico_fit": a.get("pico_fit"),
                          "why_chosen": a.get("why_chosen", ""),
                          "numbers": {"verified": checked[0], "unverified": checked[1],
                                      "reasons": {n: kind for n, kind, _ in reversed(checked[2])}},
@@ -609,6 +626,7 @@ class Agent:
                 "certainty": getattr(self, "certainty", ""),
                 "direction_warning": bool(getattr(self, "direction_warnings", [])),
                 "certainty_start": getattr(self, "certainty_start", None),
+                "overlap": self._overlap(),
                 "bottom_line": getattr(self, "bottom_line", ""),
                 "not_read": [{"title": p["title"], "authors": p.get("authors"), "year": p.get("year"),
                               "journal": p.get("journal"), "doi": p.get("doi"), "pmcid": p.get("pmcid"),
@@ -622,6 +640,20 @@ class Agent:
         return {"run_id": run_id, "report": out_path, "verified": ok_n, "rejected": rejected,
                 "papers": len(arts), "seconds": round(seconds, 1), "timing": dict(getattr(self, "timing", {})), "usage": dict(self.usage), "cost_usd": cost,
                 "served_model": self._served()}
+
+    def _overlap(self):
+        """Trials that more than one of the chosen reviews include, each name checked in that review."""
+        reviews = [(short_cite(self.store.get_paper(a["paper_id"]) or {}), a["paper_id"], a.get("included_trials"))
+                   for a in self.final or [] if a.get("included_trials")]
+
+        def text_of(pid):
+            return " ".join(r["text"] for r in self.store.conn.execute(
+                "SELECT text FROM pages WHERE paper_id=?", (pid,)))
+        shared, dropped = fit.overlap(reviews, text_of)
+        if dropped:
+            self.on_event("verify", "trial names not found in their review, left out: "
+                          + ", ".join(f"{n} ({label})" for label, n in dropped))
+        return [{"trial": t, "reviews": labels, "of": len(reviews)} for t, labels in shared]
 
     def _served(self):
         return ",".join(sorted(m for m in self.served_models if m)) or None

@@ -15,6 +15,7 @@ APP = os.path.join(os.path.dirname(__file__), "..", "app.py")
 def env(tmp_path, monkeypatch):
     db = str(tmp_path / "ui.db")
     monkeypatch.setattr(service, "DB_PATH", db)
+    monkeypatch.setenv("VLR_DB", db)      # app.py may reload service, which reads the path from here
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-used")
     monkeypatch.delenv("APP_PASSWORD", raising=False)
     monkeypatch.setenv("DAILY_RUN_LIMIT", "2")

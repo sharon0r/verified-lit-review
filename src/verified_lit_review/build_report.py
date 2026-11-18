@@ -53,6 +53,11 @@ LABELS = {
                numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא עברו בדיקה",
                r_not_in_paper="לא מופיע במאמר", r_not_on_page="לא בעמוד שצוין",
                r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
+               fit="התאמה לשאלה", p_population="אוכלוסייה", p_intervention="התערבות",
+               p_comparison="השוואה", p_outcome="תוצאה",
+               overlap="חפיפה בין הסקירות",
+               overlap_note="_ניסויים שנכללו ביותר מסקירה אחת. הסקירות חולקות אותם, ולכן אינן אישור בלתי תלוי זו של זו._",
+               overlap_item="נכלל ב-{n} מתוך {of} הסקירות",
                start_high="רמת הפתיחה, שנקבעה בקוד לפי סוגי המחקרים: גבוהה (יש ניסויים אקראיים). כל הורדה מנומקת.",
                start_low="רמת הפתיחה, שנקבעה בקוד לפי סוגי המחקרים: נמוכה (מחקרים תצפיתיים בלבד).",
                auto_review="סקירה שיטתית או מטה-אנליזה שהסוכן בחר לקרוא, אך לא הייתה בגישה פתוחה.",
@@ -86,6 +91,11 @@ LABELS = {
                numbers="Numbers checked against the paper", found="found", not_found="failed the check",
                r_not_in_paper="not in the paper", r_not_on_page="not on the cited page",
                r_sign="sign differs from the paper", r_ci_apart="estimate and interval not printed together",
+               fit="Fit to the question", p_population="population", p_intervention="intervention",
+               p_comparison="comparison", p_outcome="outcome",
+               overlap="Overlap between the reviews",
+               overlap_note="_Trials included in more than one review. The reviews share them, so they do not confirm each other independently._",
+               overlap_item="in {n} of the {of} reviews",
                start_high="Starting level, set in code from the study designs: high (randomized trials). Every step down is explained.",
                start_low="Starting level, set in code from the study designs: low (observational studies only).",
                auto_review="A systematic review or meta-analysis the agent chose to read, but it was not open access.",
@@ -237,6 +247,12 @@ def build_report(spec, pdf_dir, out):
         md.append(f"{i}. **{a.get('topic', '')}** — {cite_link(a)}"
                   + (f" · {short_journal(a['journal'])}" if a.get("journal") else ""))
     md.append("")
+    if spec.get("overlap"):
+        md += [f"## {L['overlap']}", "", L["overlap_note"], ""]
+        for o in spec["overlap"]:
+            md.append(f"- **{o['trial']}:** " + L["overlap_item"].format(n=len(o["reviews"]), of=o["of"])
+                      + f" ({'; '.join(o['reviews'])})")
+        md.append("")
     if spec.get("not_read"):
         md += [f"## {L['not_read']}", "", L["not_read_note"], ""]
         for n in spec["not_read"]:
@@ -259,6 +275,13 @@ def build_report(spec, pdf_dir, out):
             md.append(f"**{L['type']}:** {a['study_type']}  ")
         if a.get("why_chosen"):
             md.append(f"**{L['why']}:** {a['why_chosen']}  ")
+        if a.get("pico_fit"):
+            parts = []
+            for p in ("population", "intervention", "comparison", "outcome"):
+                f = a["pico_fit"].get(p) or {}
+                parts.append(f"{L['p_' + p]} ✅" if f.get("match", True)
+                             else f"{L['p_' + p]} ⚠️ ({f.get('studied', '')})")
+            md.append(f"**{L['fit']}:** {' · '.join(parts)}  ")
         md += ["", f"### {L['findings']}", ""]
         md += [f"- {b}" for b in a.get("bullets", [])]
         if a.get("numbers") is not None:
