@@ -53,6 +53,8 @@ LABELS = {
                numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא עברו בדיקה",
                r_not_in_paper="לא מופיע במאמר", r_not_on_page="לא בעמוד שצוין",
                r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
+               abstract_only="מתוך התקציר בלבד: לא אומת מול טקסט מלא. לא נכלל במספרי המסקנה ובקביעת הוודאות.",
+               abstract_short="תקציר בלבד", abstract_loc="תקציר",
                references="מקורות (בסגנון Vancouver)",
                references_note="_המאמרים שנקראו, ואחריהם המאמרים שלא ניתן היה לפתוח. יש להשלים כרך ועמודים לפני הגשה._",
                trust_ok="**נבדק בקוד:** {q} ציטוטים ו-{n} מספרים נבדקו מול המאמרים, וכולם נמצאו.",
@@ -96,6 +98,9 @@ LABELS = {
                numbers="Numbers checked against the paper", found="found", not_found="failed the check",
                r_not_in_paper="not in the paper", r_not_on_page="not on the cited page",
                r_sign="sign differs from the paper", r_ci_apart="estimate and interval not printed together",
+               abstract_only=("From the abstract only: not checked against the full text. Not used for the "
+                              "conclusion's numbers or the certainty rating."),
+               abstract_short="abstract only", abstract_loc="abstract",
                references="References (Vancouver style)",
                references_note="_Papers read, then papers that could not be opened. Add volume and pages before submission._",
                trust_ok="**Checked in code:** {q} quotes and {n} numbers were checked against the papers, and all were found.",
@@ -312,7 +317,8 @@ def build_report(spec, pdf_dir, out):
     md += [f"## {L['papers']}", ""]
     for i, a in enumerate(arts, 1):
         md.append(f"{i}. **{a.get('topic', '')}** — {cite_link(a)}"
-                  + (f" · {short_journal(a['journal'])}" if a.get("journal") else ""))
+                  + (f" · {short_journal(a['journal'])}" if a.get("journal") else "")
+                  + (f" · 📄 {L['abstract_short']}" if a.get("abstract_only") else ""))
     md.append("")
     if spec.get("not_read"):
         md += [f"## {L['not_read']}", "", L["not_read_note"], ""]
@@ -323,15 +329,20 @@ def build_report(spec, pdf_dir, out):
 
     ok_n, rejected = 0, []
     for i, a in enumerate(arts, 1):
-        path = os.path.join(pdf_dir, a["file"])
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"article {i}: PDF not found: {path}")
-        with pymupdf.open(path) as doc:
-            pages = [norm(p.get_text()) for p in doc]
+        if a.get("abstract_only"):      # no open PDF: checked against the abstract, shown as such
+            pages = {0: norm(a.get("abstract") or "")}
+        else:
+            path = os.path.join(pdf_dir, a["file"])
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f"article {i}: PDF not found: {path}")
+            with pymupdf.open(path) as doc:
+                pages = {k: norm(p.get_text()) for k, p in enumerate(doc, 1)}
         off = int(a.get("page_offset") or 0)
         source = " · ".join(str(x) for x in [short_cite(a), short_journal(a.get("journal"))] if x)
         md += [f"## {i}. {a.get('topic', a['title'])}", "",
                f"**{L['article']}:** {linked_title(a)}  ", f"**{L['source']}:** {source}  "]
+        if a.get("abstract_only"):
+            md.append(f"📄 **{L['abstract_only']}**  ")
         if a.get("study_type"):
             md.append(f"**{L['type']}:** {a['study_type']}  ")
         if a.get("why_chosen"):
@@ -357,13 +368,14 @@ def build_report(spec, pdf_dir, out):
                 rejected.append({"article": i, "file": a["file"], "claimed_page": page,
                                  "found_on_pages": [], "reason": "too short to verify", "text": text})
                 continue
-            if 1 <= page <= len(pages) and n in pages[page - 1]:
+            if page in pages and n in pages[page]:
                 ok_n += 1
                 kept += 1
-                loc = f"{L['pdf_page']} {page}" + (f" ({L['journal_page'].format(page + off)})" if off else "")
+                loc = (L["abstract_loc"] if a.get("abstract_only") else f"{L['pdf_page']} {page}"
+                       + (f" ({L['journal_page'].format(page + off)})" if off else ""))
                 md += [f"> \"{display_quote(text)}\"", ">", f"> — {loc} · {L['ok']}", ""]
             else:
-                found = [k + 1 for k, p in enumerate(pages) if n and n in p]
+                found = [k for k, p in pages.items() if n and n in p]
                 rejected.append({"article": i, "file": a["file"], "claimed_page": page,
                                  "found_on_pages": found, "text": text})
         if not kept:

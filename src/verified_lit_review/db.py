@@ -168,6 +168,13 @@ class Store:
             self.conn.executemany("INSERT INTO pages (paper_id, page, text) VALUES (?, ?, ?)",
                                   [(paper_id, i, t) for i, t in enumerate(page_texts, 1)])
 
+    def add_abstract(self, paper_id, text):
+        """Index a paper's abstract as page 0, for a paper whose full text could not be opened."""
+        paper_id = paper_key(paper_id)
+        with self.conn:
+            self.conn.execute("DELETE FROM pages WHERE paper_id=? AND page=0", (paper_id,))
+            self.conn.execute("INSERT INTO pages (paper_id, page, text) VALUES (?, 0, ?)", (paper_id, text))
+
     def page_count(self, paper_id):
         return self.conn.execute("SELECT COUNT(*) FROM pages WHERE paper_id=?",
                                  (paper_key(paper_id),)).fetchone()[0]

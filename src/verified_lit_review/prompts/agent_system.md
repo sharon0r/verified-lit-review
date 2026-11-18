@@ -17,6 +17,10 @@ one with five weak ones, and nothing may be invented.
   when that happens, pick the next best candidate instead.
 - `retrieve_passages` - get the pages of one fetched paper that best match a query. This is the
   only way to read a paper. Quotes may come only from text returned by this tool.
+- `use_abstract` - when a key paper (a large trial, the newest review) could not be downloaded, you
+  may use its abstract instead, for at most 2 papers. Quote it with page 0. The report marks it
+  "from the abstract only"; its numbers may not appear in the conclusion, and it does not count
+  toward the certainty rating. Prefer a downloadable paper of the same quality when one exists.
 - `verify_quote` - check that a sentence appears word for word on a given page.
 - `submit_report` - hand in the final review. The system verifies every quote again and tells
   you which ones failed.

@@ -425,3 +425,35 @@ def test_one_trust_line_replaces_the_per_paper_check_lines_when_all_is_found(set
     assert "✅ **Checked in code:** 1 quotes and 3 numbers were checked against the papers, and all were found." in report
     assert report.index("Checked in code") < report.index("## Papers in this review")
     assert "Numbers checked against the paper" not in report          # shown only when a number fails
+
+
+ABSTRACT = ("Background: Daily bathing may prevent infection. Methods: cluster randomised crossover trial in "
+            "22 ICUs. Results: The primary outcome occurred at 3.99 per 1,000 patient-days in the "
+            "intervention arm vs 3.45 in the control arm. Conclusion: no reduction was found in this trial.")
+
+
+def test_abstract_only_paper_is_marked_kept_out_of_conclusion_numbers_and_certainty(setup):
+    store, pid, tmp = setup
+    trial = store.upsert_paper({"doi": "10.1/clean-it", "source": "europepmc", "year": "2026",
+                                "title": "Daily bathing: a cluster-randomised crossover trial",
+                                "authors": "Tomazini BM", "journal": "Lancet Reg Health Am", "abstract": ABSTRACT})
+    agent = Agent(store, str(tmp))
+    agent.fetched.add(pid)
+    assert "error" in agent.use_abstract(trial)                 # only after a failed download
+    agent.failed = [trial]
+    assert agent.use_abstract(trial)["pages"] == [0]
+    quote = "The primary outcome occurred at 3.99 per 1,000 patient-days in the intervention arm vs 3.45 in the control arm."
+    art2 = {"paper_id": trial, "topic": "t", "study_type": "cluster randomised trial", "relevance": "r",
+            "bullets": [{"text": "3.99 per 1,000 patient-days in the intervention arm vs 3.45 in control.", "pages": [0]}],
+            "quotes": [{"page": 0, "text": quote}]}
+    art1 = {**article(pid, [{"page": 1, "text": GOOD}]), "study_type": "observational cohort, n=240"}
+    r = agent.submit_report([art1, art2], conclusion="The trial found 3.99 vs 3.45.",
+                            certainty="Low: observational evidence only.")
+    assert r["accepted"] is False and "3.99" in r["number_warnings"][-1]["numbers_not_in_paper"]   # not in conclusion
+    assert agent.certainty_start == "low"            # the abstract's randomized design does not raise the start
+    ok = agent.fix_report([{"field": "conclusion", "paper_id": "", "index": 0, "page": 0,
+                            "text": "One trial, read from its abstract only, found no reduction."}])
+    assert ok["accepted"] is True
+    out = agent._write_report(agent.store.start_run("q"), "q", "en", str(tmp / "r.md"), 1.0)
+    report = (tmp / "r.md").read_text(encoding="utf-8")
+    assert out["verified"] == 2 and "📄 **From the abstract only" in report and "— abstract · ✅ verified" in report

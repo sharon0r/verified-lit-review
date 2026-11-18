@@ -121,6 +121,8 @@ NOT_READ = _schema({
                                      "scope), with no results, numbers or direction of effect"},
 })
 MAX_NOT_READ = 3
+MAX_ABSTRACTS = 2          # papers that may be used from their abstract when the PDF is not open access
+MIN_ABSTRACT_CHARS = 200
 REPORT_FIELDS = ["bottom_line", "conclusion", "certainty", "pico"]
 ARTICLE_FIELDS = ["topic", "study_type", "why_chosen", "relevance"]
 EDIT = _schema({
@@ -150,6 +152,13 @@ TOOLS = [
      "description": "Return the pages of a fetched paper that best match the query, with page numbers.",
      "input_schema": _schema({"paper_id": {"type": "string"}, "query": {"type": "string"},
                               "k": {"type": "integer", "description": "pages, 1-4"}})},
+    {"name": "use_abstract", "strict": True,
+     "description": f"For an important paper whose PDF could not be downloaded (fetch_paper failed): use "
+                    f"its abstract instead, at most {MAX_ABSTRACTS} papers per review. Quotes then come from "
+                    "the abstract (page 0) and are checked against it; the report marks the paper as "
+                    "'from the abstract only'. Its numbers may not appear in the conclusion, and it does "
+                    "not count toward the certainty rating.",
+     "input_schema": _schema({"paper_id": {"type": "string"}})},
     {"name": "verify_quote", "strict": True,
      "description": "Check that a quote appears word for word on the given page of a fetched paper.",
      "input_schema": _schema({"paper_id": {"type": "string"}, "page": {"type": "integer"},
@@ -190,6 +199,7 @@ class Agent:
         self.should_stop = should_stop or (lambda: False)   # checked before every paid model call
         self.fetched, self.submissions, self.final, self.done = set(), 0, None, False
         self.failed = []           # papers the agent chose to fetch but no open PDF could be downloaded
+        self.abstract_only = set() # of those, papers used from their abstract (use_abstract)
         self.search_turns = 0
         self.author_words = set()  # every word of every author list the searches returned
         self.usage = {"input_tokens": 0, "output_tokens": 0,
@@ -234,6 +244,24 @@ class Agent:
                                                   "another candidate you already found"}
         self.fetched.add(paper_id)
         return {"status": "ok", "pages": r["pages"]}
+
+    def use_abstract(self, paper_id):
+        """Use the abstract of a paper whose PDF could not be opened (approved: at most 2, marked)."""
+        if paper_id in self.abstract_only:
+            return {"status": "ok", "pages": [0]}
+        if paper_id not in self.failed:
+            return {"error": "use_abstract is only for a paper whose fetch_paper failed; fetch it first"}
+        if len(self.abstract_only) >= MAX_ABSTRACTS:
+            return {"error": f"at most {MAX_ABSTRACTS} papers from their abstract; list the others in not_read"}
+        abstract = ((self.store.get_paper(paper_id) or {}).get("abstract") or "").strip()
+        if len(abstract) < MIN_ABSTRACT_CHARS:
+            return {"error": "this paper has no usable abstract; list it in not_read instead"}
+        self.store.add_abstract(paper_id, abstract)
+        self.abstract_only.add(paper_id)
+        self.fetched.add(paper_id)
+        self.on_event("fetch", f"{paper_id}: abstract only")
+        return {"status": "ok", "pages": [0], "untrusted_document_text": abstract[:PAGE_CHARS],
+                "note": "quotes from this paper use page 0; its numbers may not appear in the conclusion"}
 
     def retrieve_passages(self, paper_id, query, k=3):
         if paper_id not in self.fetched:
@@ -292,6 +320,8 @@ class Agent:
         papers let a number pass because it happened to appear somewhere else in some paper."""
         traced = []
         for a in articles:
+            if a["paper_id"] in self.abstract_only:
+                continue                # approved rule: no numbers from an abstract in the conclusion
             traced += self._number_check(a)[0]
             traced += [q["text"] for q in a["quotes"] if self._check(a["paper_id"], int(q["page"]), q["text"])[0]]
         return numbers.check(conclusion, numbers.PaperNumbers([" ".join(traced)]))
@@ -339,9 +369,10 @@ class Agent:
 
     def _missing_strong(self):
         """([(paper_id, kind)] strong studies that failed to download, [paper_id] strong ones read)."""
-        failed = [(pid, k) for pid in self.failed if pid not in self.fetched
+        # a paper used from its abstract was still not read in full: it counts as missing
+        failed = [(pid, k) for pid in self.failed if pid not in self.fetched or pid in self.abstract_only
                   for k in [strength(self.store.get_paper(pid) or {})] if k]
-        read = [pid for pid in self.fetched if strength(self.store.get_paper(pid) or {})]
+        read = [pid for pid in self.fetched - self.abstract_only if strength(self.store.get_paper(pid) or {})]
         return failed, read
 
     def _provisional_check(self, certainty):
@@ -451,7 +482,8 @@ class Agent:
         pico = fit.pico_problems(articles, getattr(self, "question", ""), certainty, texts)
         # GRADE start from the designs in code; every level down (or up) must be explained
         designs = [grade.design(f"{(self.store.get_paper(a['paper_id']) or {}).get('title', '')} "
-                                f"{a.get('study_type', '')}") for a in articles]
+                                f"{a.get('study_type', '')}") for a in articles
+                   if a["paper_id"] not in self.abstract_only]    # an abstract cannot raise the start
         self.certainty_start, grade_problem = grade.check(certainty, designs)
         # an effect verb on a result whose interval includes no effect (enforced)
         places = [("bottom_line", bottom_line), ("conclusion", conclusion)]
@@ -617,10 +649,13 @@ class Agent:
         arts = []
         for a in self.final:
             p = self.store.get_paper(a["paper_id"]) or {}
-            if not p.get("pdf_path"):
+            abstract_only = a["paper_id"] in self.abstract_only
+            if not p.get("pdf_path") and not abstract_only:
                 continue
             checked = self._number_check(a)
-            arts.append({"file": os.path.abspath(p["pdf_path"]), "title": p["title"], "authors": p.get("authors"),
+            arts.append({"file": os.path.abspath(p["pdf_path"]) if p.get("pdf_path") and not abstract_only else None,
+                         "abstract_only": abstract_only, "abstract": p.get("abstract") if abstract_only else None,
+                         "title": p["title"], "authors": p.get("authors"),
                          "year": p.get("year"), "journal": p.get("journal"), "doi": p.get("doi"),
                          "pmcid": p.get("pmcid"), "topic": a["topic"], "study_type": a["study_type"],
                          "bullets": [b["text"] for b in bullets_of(a)],
