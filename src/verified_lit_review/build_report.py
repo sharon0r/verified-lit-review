@@ -53,6 +53,8 @@ LABELS = {
                numbers="מספרים שנבדקו מול המאמר", found="נמצאו", not_found="לא עברו בדיקה",
                r_not_in_paper="לא מופיע במאמר", r_not_on_page="לא בעמוד שצוין",
                r_sign="הסימן שונה מהמאמר", r_ci_apart="האומדן ורווח הסמך לא מופיעים יחד",
+               references="מקורות (בסגנון Vancouver)",
+               references_note="_המאמרים שנקראו, ואחריהם המאמרים שלא ניתן היה לפתוח. יש להשלים כרך ועמודים לפני הגשה._",
                trust_ok="**נבדק בקוד:** {q} ציטוטים ו-{n} מספרים נבדקו מול המאמרים, וכולם נמצאו.",
                trust_some=("**נבדק בקוד:** {q_ok} מתוך {q} ציטוטים ו-{n_ok} מתוך {n} מספרים נמצאו במאמרים. "
                            "מה שלא נמצא מסומן ⚠️ בדוח."),
@@ -94,6 +96,8 @@ LABELS = {
                numbers="Numbers checked against the paper", found="found", not_found="failed the check",
                r_not_in_paper="not in the paper", r_not_on_page="not on the cited page",
                r_sign="sign differs from the paper", r_ci_apart="estimate and interval not printed together",
+               references="References (Vancouver style)",
+               references_note="_Papers read, then papers that could not be opened. Add volume and pages before submission._",
                trust_ok="**Checked in code:** {q} quotes and {n} numbers were checked against the papers, and all were found.",
                trust_some=("**Checked in code:** {q_ok} of {q} quotes and {n_ok} of {n} numbers were found in the "
                            "papers. Anything not found is marked ⚠️ in the report."),
@@ -208,6 +212,41 @@ def short_cite(a):
         name = words[0] if len(words) > 1 and re.fullmatch(r"[A-Z]{1,3}", words[-1]) else words[-1]
         first = name + (" et al." if "," in str(a.get("authors")) else "")
     return ", ".join(x for x in [first, str(a.get("year") or "")] if x)
+
+
+def vancouver_authors(authors, limit=6):
+    """'Elsa Afonso, Koen Blot' or 'Afonso E, Blot K' -> 'Afonso E, Blot K'; more than 6 -> 6 + 'et al.'"""
+    names, more = [], False
+    for raw in str(authors or "").split(","):
+        n = " ".join(raw.replace(".", " ").split())
+        if not n:
+            continue
+        if n.lower().startswith("et al"):
+            more = True
+            continue
+        words = n.split()
+        if len(words) > 1 and re.fullmatch(r"[A-Z]{1,3}", words[-1]):
+            names.append(n)                                   # already 'Surname AB'
+        elif len(words) > 1:                                  # 'Elsa M Afonso' -> 'Afonso EM'
+            names.append(words[-1] + " " + "".join(w[0].upper() for w in words[:-1] if w[0].isalpha()))
+        else:
+            names.append(n)
+    if len(names) > limit:
+        names, more = names[:limit], True
+    return ", ".join(names) + (", et al." if more and names else "." if names else "")
+
+
+def vancouver(a):
+    """One reference in Vancouver style from what the search records hold (no volume or pages)."""
+    title = " ".join(str(a.get("title") or "").split()).rstrip(".")
+    parts = [vancouver_authors(a.get("authors")), f"{title}.", f"{short_journal(a.get('journal'))}."
+             if a.get("journal") else "", f"{a.get('year')}." if a.get("year") else ""]
+    ref = " ".join(p for p in parts if p)
+    if a.get("doi"):
+        ref += f" doi:{a['doi']}"
+    elif paper_url(a):
+        ref += f" {paper_url(a)}"
+    return ref
 
 
 def cite_link(a):
@@ -331,6 +370,9 @@ def build_report(spec, pdf_dir, out):
             md += ["_(—)_", ""]
         md += ["---", ""]
 
+    refs = arts + list(spec.get("not_read") or [])
+    md += [f"## {L['references']}", "", L["references_note"], ""]
+    md += [f"{i}. {vancouver(a)}" for i, a in enumerate(refs, 1)] + [""]
     md += [f"## {L['how']}", "", L["summary"].format(ok=ok_n, bad=len(rejected)), ""]
     if spec.get("overlap"):
         md += [f"**{L['overlap']}** — {L['overlap_note']}", ""]

@@ -149,3 +149,16 @@ def test_pdf_line_end_hyphens_are_joined_for_display_only():
         "Even though traditional levels for superiority"
     assert display_quote("cross-in- fection rates") == "cross-infection rates"
     assert display_quote("short- and long-term outcomes") == "short- and long-term outcomes"
+
+
+def test_vancouver_reference_from_both_author_formats():
+    from build_report import vancouver, vancouver_authors
+    assert vancouver_authors("Elsa Afonso, Koen Blot, Stijn Blot") == "Afonso E, Blot K, Blot S."
+    assert vancouver_authors("Musuuza JS, Guru PK, O'Horo JC") == "Musuuza JS, Guru PK, O'Horo JC."
+    many = ", ".join(f"Author{i} A" for i in range(8)) + ", et al."
+    assert vancouver_authors(many).endswith("Author5 A, et al.") and "Author6" not in vancouver_authors(many)
+    ref = vancouver({"authors": "Afonso E, Blot K", "title": "Prevention of bloodstream infections.",
+                     "journal": "Euro surveillance : bulletin Europeen", "year": "2016",
+                     "doi": "10.2807/1560-7917.es.2016.21.46.30400"})
+    assert ref == ("Afonso E, Blot K. Prevention of bloodstream infections. Euro surveillance. 2016. "
+                   "doi:10.2807/1560-7917.es.2016.21.46.30400")
