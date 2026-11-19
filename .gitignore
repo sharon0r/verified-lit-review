@@ -24,3 +24,6 @@ output/
 
 # personal interview notes
 explain_project.md
+
+# Claude Code local settings (permissions of this machine)
+.claude/
